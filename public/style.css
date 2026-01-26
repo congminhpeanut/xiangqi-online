@@ -1,0 +1,332 @@
+:root {
+    --bg-color: #1e1e24;
+    /* Dark refined background */
+    --primary-color: #d4af37;
+    /* Metallic Gold */
+    --accent-red: #e63946;
+    --accent-black: #1a1a1a;
+    --board-bg: #eecfa1;
+    /* Wood color */
+    --board-line: #5c4033;
+    /* Dark brown for lines */
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --text-color: #f1f1f1;
+}
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    overflow: hidden;
+    /* Prevent scrolling on mobile if possible */
+}
+
+#app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    transition: opacity 0.5s ease;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Glassmorphism */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.card {
+    padding: 2rem 3rem;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+}
+
+.card h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--primary-color);
+}
+
+.subtitle {
+    color: #aaa;
+    margin-bottom: 2rem;
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.join-form {
+    display: flex;
+    gap: 0.5rem;
+}
+
+input {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    padding: 0.8rem;
+    border-radius: 8px;
+    color: white;
+    font-size: 1rem;
+    width: 100%;
+}
+
+.btn {
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.1s, filter 0.2s;
+}
+
+.btn:hover {
+    filter: brightness(1.1);
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.primary {
+    background: var(--primary-color);
+    color: #000;
+}
+
+.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.danger {
+    background: var(--accent-red);
+    color: white;
+}
+
+.divider {
+    color: #666;
+    font-size: 0.8rem;
+    margin: 0.5rem 0;
+}
+
+/* Game Screen */
+.game-container {
+    width: 100%;
+    max-width: 600px;
+    /* Constrain width for desktop */
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    box-sizing: border-box;
+}
+
+.game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.player-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.avatar {
+    width: 40px;
+    height: 40px;
+    background: #333;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid var(--glass-border);
+}
+
+.badge {
+    padding: 0.5rem 1rem;
+    background: #333;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* BOARD */
+.board-wrapper {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* Maintain aspect ratio */
+}
+
+.xiangqi-board {
+    position: relative;
+    /* Aspect Ratio is roughly 9 Width : 10 Height */
+    width: 100%;
+    max-width: 450px;
+    /* Based on typical mobile width */
+    aspect-ratio: 9 / 10;
+    background-color: var(--board-bg);
+    border-radius: 4px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    user-select: none;
+}
+
+/* Grid Lines */
+/* Grid Lines - Top Half */
+.xiangqi-board::before {
+    content: "";
+    position: absolute;
+    top: 5%;
+    left: calc(100% / 18);
+    width: calc(100% * 8 / 9);
+    height: 40%;
+    box-sizing: border-box;
+    border: 1px solid var(--board-line);
+    border-bottom: 0;
+
+    background-image:
+        linear-gradient(90deg, var(--board-line) 1px, transparent 1px),
+        linear-gradient(var(--board-line) 1px, transparent 1px);
+    background-size: calc(100% / 8) calc(100% / 4);
+    background-position: 0 -1px;
+    /* Align lines */
+}
+
+/* Grid Lines - Bottom Half */
+.xiangqi-board::after {
+    content: "";
+    position: absolute;
+    bottom: 5%;
+    left: calc(100% / 18);
+    width: calc(100% * 8 / 9);
+    height: 40%;
+    box-sizing: border-box;
+    border: 1px solid var(--board-line);
+    border-top: 0;
+
+    background-image:
+        linear-gradient(90deg, var(--board-line) 1px, transparent 1px),
+        linear-gradient(var(--board-line) 1px, transparent 1px);
+    background-size: calc(100% / 8) calc(100% / 4);
+    background-position: 0 1px;
+}
+
+/* River */
+.river {
+    position: absolute;
+    top: 45%;
+    left: 5%;
+    width: 90%;
+    height: 10%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--board-line);
+    font-family: "KaiTi", "SimKai", serif;
+    font-size: 1.5rem;
+    pointer-events: none;
+}
+
+/* Pieces */
+.piece {
+    position: absolute;
+    width: 11.11%;
+    /* 1/9 */
+    height: 10%;
+    /* 1/10 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s, top 0.3s, left 0.3s;
+    z-index: 10;
+}
+
+.piece svg {
+    width: 90%;
+    height: 90%;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
+}
+
+.piece.selected svg {
+    filter: drop-shadow(0 0 5px var(--primary-color));
+    transform: scale(1.1);
+}
+
+.piece.last-move {
+    background: rgba(255, 255, 0, 0.2);
+    border-radius: 50%;
+}
+
+.move-indicator {
+    position: absolute;
+    width: 11.11%;
+    height: 10%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto;
+    /* Allow clicks to register */
+    z-index: 5;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    background: rgba(0, 255, 0, 0.5);
+    border-radius: 50%;
+}
+
+/* Game Controls */
+.game-controls {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}
+
+/* Modal */
+#modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
