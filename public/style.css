@@ -243,6 +243,32 @@ input {
     background-position: 0 1px;
 }
 
+/* Palace Diagonals */
+.palace-top,
+.palace-bottom {
+    position: absolute;
+    left: calc(100% * 3 / 9 + 100% / 18);
+    width: calc(100% * 2 / 9);
+    height: 20%;
+    /* 2 grid cells high */
+    pointer-events: none;
+    z-index: 1;
+}
+
+.palace-top {
+    top: 5%;
+    background:
+        linear-gradient(to bottom right, transparent calc(50% - 1px), var(--board-line) calc(50% - 1px), var(--board-line) calc(50% + 1px), transparent calc(50% + 1px)),
+        linear-gradient(to bottom left, transparent calc(50% - 1px), var(--board-line) calc(50% - 1px), var(--board-line) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+.palace-bottom {
+    bottom: 5%;
+    background:
+        linear-gradient(to bottom right, transparent calc(50% - 1px), var(--board-line) calc(50% - 1px), var(--board-line) calc(50% + 1px), transparent calc(50% + 1px)),
+        linear-gradient(to bottom left, transparent calc(50% - 1px), var(--board-line) calc(50% - 1px), var(--board-line) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
 /* River */
 .river {
     position: absolute;

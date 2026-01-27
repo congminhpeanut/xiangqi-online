@@ -97,7 +97,11 @@ function getBoardPos(x, y) {
 }
 
 function renderBoard() {
-    boardEl.innerHTML = '<div class="river">楚 河 &nbsp;&nbsp;&nbsp;&nbsp; 漢 界</div>'; // Clear but keep river
+    boardEl.innerHTML = `
+        <div class="river">楚 河 &nbsp;&nbsp;&nbsp;&nbsp; 漢 界</div>
+        <div class="palace-top"></div>
+        <div class="palace-bottom"></div>
+    `;
 
     // Draw pieces
     for (let y = 0; y < 10; y++) {

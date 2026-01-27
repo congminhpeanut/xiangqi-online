@@ -312,8 +312,10 @@ class XiangqiGame {
         this.switchTurn();
 
         // Check for Game Over (No legal moves for current player)
+        // Check for Game Over (No legal moves for current player)
         if (!this.hasLegalMoves(this.turn)) {
-            this.winner = nextColor; // Previous player wins
+            // The player who cannot move loses. The OTHER player wins.
+            this.winner = this.turn === 'red' ? 'black' : 'red';
         }
 
         return true;
