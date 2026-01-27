@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Online Xiangqi | Real-time Chinese Chess</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
     <div id="app">
@@ -14,7 +16,7 @@
             <div class="card glass">
                 <h1>Xiangqi Online</h1>
                 <p class="subtitle">Real-time Chinese Chess</p>
-                
+
                 <div class="actions">
                     <button id="btn-create" class="btn primary">Create Match</button>
                     <div class="divider">OR</div>
@@ -32,9 +34,12 @@
                 <header class="game-header">
                     <div class="player-info" id="top-player">
                         <div class="avatar">👤</div>
-                        <span class="name">Opponent</span>
+                        <div class="details">
+                            <span class="name">Opponent</span>
+                            <div class="timer" id="timer-top">10:00</div>
+                        </div>
                     </div>
-                    
+
                     <div class="status-display">
                         <div id="turn-indicator" class="badge">Red's Turn</div>
                         <div id="message-area" class="message"></div>
@@ -42,7 +47,10 @@
 
                     <div class="player-info" id="bottom-player">
                         <div class="avatar">👤</div>
-                        <span class="name">You</span>
+                        <div class="details">
+                            <span class="name">You</span>
+                            <div class="timer" id="timer-bottom">10:00</div>
+                        </div>
                     </div>
                 </header>
 
@@ -74,4 +82,5 @@
     <script src="pieces.js"></script>
     <script src="client.js"></script>
 </body>
+
 </html>

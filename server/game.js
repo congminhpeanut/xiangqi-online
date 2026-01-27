@@ -17,6 +17,37 @@ class XiangqiGame {
         this.turn = 'red'; // Red moves first
         this.winner = null;
         this.history = [];
+
+        // Timer settings (10 minutes in ms)
+        this.timeLimit = 10 * 60 * 1000;
+        this.timeLeft = {
+            red: this.timeLimit,
+            black: this.timeLimit
+        };
+        this.lastMoveTime = null; // Timestamp of the last move
+    }
+
+    // Call when the game actually starts (first move) or resumes
+    startTimer() {
+        this.lastMoveTime = Date.now();
+    }
+
+    // Deduct time for the current turn player
+    // Returns true if time is left, false if timeout
+    updateTimer() {
+        if (!this.lastMoveTime) return true;
+
+        const now = Date.now();
+        const elapsed = now - this.lastMoveTime;
+
+        this.timeLeft[this.turn] -= elapsed;
+        this.lastMoveTime = now;
+
+        if (this.timeLeft[this.turn] <= 0) {
+            this.timeLeft[this.turn] = 0;
+            return false; // Timeout
+        }
+        return true;
     }
 
     getPiece(x, y) {
@@ -40,7 +71,7 @@ class XiangqiGame {
 
         const piece = this.getPiece(fromX, fromY);
         if (!piece) return false;
-        
+
         // Check ownership
         const pieceColor = piece.charAt(0) === 'r' ? 'red' : 'black';
         if (pieceColor !== color) return false;
@@ -136,10 +167,10 @@ class XiangqiGame {
                 // Move forward 1 step.
                 // If crossed river, can also move sideways 1 step.
                 // Never backward.
-                
+
                 // Red moves UP (-y), Black moves DOWN (+y)
                 const forward = color === 'red' ? -1 : 1;
-                
+
                 // Check forward move
                 if (dx === 0 && dy === forward) {
                     valid = true;
@@ -179,7 +210,7 @@ class XiangqiGame {
         // Find King position
         let kx, ky;
         const kingType = color === 'red' ? 'rge' : 'bge'; // Red General / Black General
-        
+
         for (let y = 0; y < 10; y++) {
             for (let x = 0; x < 9; x++) {
                 if (this.board[y][x] === kingType) {
@@ -208,7 +239,7 @@ class XiangqiGame {
                 }
             }
         }
-        
+
         // Flying General Special Check:
         // If Kings are on same column with no pieces between -> Illegal state usually, 
         // but depending on whose turn it is, it might be a Check.
@@ -228,7 +259,7 @@ class XiangqiGame {
                 }
             }
         }
-        
+
         if (kx === okx) {
             // Check pieces between
             if (this.countPiecesBetween(kx, ky, okx, oky) === 0) {
@@ -243,23 +274,23 @@ class XiangqiGame {
     testMove(fromX, fromY, toX, toY, color) {
         const savedTarget = this.board[toY][toX];
         const savedSource = this.board[fromY][fromX];
-        
+
         // Execute
         this.board[toY][toX] = savedSource;
         this.board[fromY][fromX] = null;
-        
+
         const inCheck = this.isInCheck(color);
-        
+
         // Revert
         this.board[fromY][fromX] = savedSource;
         this.board[toY][toX] = savedTarget;
-        
+
         return !inCheck;
     }
 
     makeMove(fromX, fromY, toX, toY) {
         if (this.winner) return false;
-        
+
         // 1. Basic Validation
         if (!this.isValidMove(fromX, fromY, toX, toY, this.turn)) return false;
 
@@ -270,16 +301,16 @@ class XiangqiGame {
         const captured = this.board[toY][toX];
         this.board[toY][toX] = this.board[fromY][fromX];
         this.board[fromY][fromX] = null;
-        this.history.push({ from: {x: fromX, y: fromY}, to: {x: toX, y: toY}, captured });
+        this.history.push({ from: { x: fromX, y: fromY }, to: { x: toX, y: toY }, captured });
 
         // Check if Enemy is Checkmated (or Stalemated - in Xiangqi stalemate IS a loss usually? No, Stalemate is usually a draw or loss depending on rule set, but standard is Loss for the one who cannot move)
         // Switch turn first to check opponent's status
         const nextColor = this.turn === 'red' ? 'black' : 'red';
-        
+
         // "Flying General" check happens in isInCheck
-        
+
         this.switchTurn();
-        
+
         // Check for Game Over (No legal moves for current player)
         if (!this.hasLegalMoves(this.turn)) {
             this.winner = nextColor; // Previous player wins

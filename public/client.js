@@ -8,6 +8,50 @@ let selectedSquare = null; // {x, y}
 let isMyTurn = false;
 let gameTurn = 'red';
 let isBlackTop = true; // If I am red (or spec), Black is top. If I am black, Red is top (flipped).
+let timeLeft = { red: 600000, black: 600000 };
+let lastMoveTime = null;
+let timerInterval = null;
+
+// Audio Context for synthesized sounds
+let audioCtx = null;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+function playSound(isCapture) {
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    if (isCapture) {
+        // "Thud" / Capture sound: Lower pitch, rapid decay
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.15);
+        gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+    } else {
+        // "Clack" / Move sound: Higher pitch, very short
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.05);
+        gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.05);
+    }
+}
+
 
 // DOM Elements
 const screens = {
@@ -19,6 +63,8 @@ const btnJoin = document.getElementById('btn-join');
 const inputRoomId = document.getElementById('input-room-id');
 const boardEl = document.getElementById('board');
 const turnIndicator = document.getElementById('turn-indicator');
+const timerTop = document.getElementById('timer-top'); // Added
+const timerBottom = document.getElementById('timer-bottom'); // Added
 const messageArea = document.getElementById('message-area');
 const btnCopy = document.getElementById('btn-copy-link');
 const btnLeave = document.getElementById('btn-leave');
@@ -74,11 +120,7 @@ function renderBoard() {
 
                 boardEl.appendChild(el);
             } else {
-                // Invisible click target for empty squares ? 
-                // Better approach: We need to handle clicks on empty squares for MOVING.
-                // We'll create a grid of "cells" or handle click on board and calculate coord?
-                // Handling click on board is tricky with % positioning. 
-                // Let's create invisible "ghost" pieces for empty spots if selected.
+                // Invisible click target for empty squares
                 if (selectedSquare) {
                     const el = document.createElement('div');
                     el.className = 'move-indicator'; // Invisible but clickable
@@ -88,7 +130,6 @@ function renderBoard() {
                     el.style.top = pos.top;
                     el.onclick = (e) => handleSquareClick(x, y);
 
-                    // Optional: Show dot if valid move? (Requires simulating logic or server hint)
                     // MVP: Just clickable.
                     boardEl.appendChild(el);
                 }
@@ -139,6 +180,55 @@ function updateStatus() {
     isMyTurn = (myRole === gameTurn);
 }
 
+function formatTime(ms) {
+    if (ms < 0) ms = 0;
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateTimers() {
+    // Only update if we have a lastMoveTime (game started)
+    let redTime = timeLeft.red;
+    let blackTime = timeLeft.black;
+
+    if (lastMoveTime) {
+        const now = Date.now();
+        const elapsed = now - lastMoveTime;
+        if (gameTurn === 'red') redTime -= elapsed;
+        else blackTime -= elapsed;
+    }
+
+    // Determine who is top/bottom
+    let bottomTime, topTime;
+
+    if (myRole === 'black') {
+        bottomTime = blackTime;
+        topTime = redTime;
+    } else {
+        bottomTime = redTime;
+        topTime = blackTime;
+    }
+
+    timerBottom.innerText = formatTime(bottomTime);
+    timerTop.innerText = formatTime(topTime);
+
+    // Styling for low time
+    if (bottomTime < 30000) timerBottom.classList.add('low');
+    else timerBottom.classList.remove('low');
+
+    if (topTime < 30000) timerTop.classList.add('low');
+    else timerTop.classList.remove('low');
+}
+
+function startCountdown() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        updateTimers();
+    }, 100); // 100ms for smoothness
+}
+
 // --- Socket Events ---
 
 socket.on('init', (data) => {
@@ -147,12 +237,10 @@ socket.on('init', (data) => {
     boardState = data.fen;
     gameTurn = data.turn;
 
+    if (data.timeLeft) timeLeft = data.timeLeft;
+    if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
+
     // Set board orientation
-    // Default isBlackTop=true (Red at bottom)
-    // If I am black, I want Red at top (isBlackTop=false concept, but basically inverted)
-    // Actually simpler: 
-    // If I am Red (or Spec), view is Normal (Red Bottom).
-    // If I am Black, view is Inverted (Black Bottom).
     isBlackTop = true; // This matches "Red at bottom"
 
     // Update UI info
@@ -170,6 +258,7 @@ socket.on('init', (data) => {
     showScreen('game');
     renderBoard();
     updateStatus();
+    startCountdown();
 
     // URL
     history.pushState({}, '', `?room=${currentRoom}`);
@@ -178,10 +267,17 @@ socket.on('init', (data) => {
 socket.on('update', (data) => {
     boardState = data.board;
     gameTurn = data.turn;
+
+    if (data.timeLeft) timeLeft = data.timeLeft;
+    if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
+
     renderBoard();
     updateStatus();
 
-    // Play sound?
+    // Play sound
+    if (data.lastMove) {
+        playSound(data.lastMove.captured);
+    }
 });
 
 socket.on('player_joined', (data) => {
@@ -207,16 +303,19 @@ socket.on('game_over', (data) => {
         modalMsg.innerText = "You Lost. Better luck next time!";
     }
     modal.classList.remove('hidden');
+    if (timerInterval) clearInterval(timerInterval);
 });
 
 // --- UI Listeners ---
 
 btnCreate.onclick = () => {
+    initAudio();
     const uuid = Math.random().toString(36).substring(2, 8); // Simple ID
     socket.emit('join_room', uuid);
 };
 
 btnJoin.onclick = () => {
+    initAudio();
     const id = inputRoomId.value.trim();
     if (id) socket.emit('join_room', id);
 };

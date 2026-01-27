@@ -60,11 +60,25 @@ io.on('connection', (socket) => {
             fen: room.game.board, // We send the raw board array
             turn: room.game.turn,
             history: room.game.history,
-            isBlackTop: true // Standard view
+            isBlackTop: true, // Standard view
+            timeLeft: room.game.timeLeft,
+            lastMoveTime: room.game.lastMoveTime
         });
 
         // Notify others
         io.to(roomId).emit('player_joined', { role: role });
+
+        // If both players are present, start the timer (if not already started)
+        if (room.players.red && room.players.black && !room.game.lastMoveTime && room.game.history.length === 0) {
+            room.game.startTimer();
+            io.to(roomId).emit('update', {
+                board: room.game.board,
+                turn: room.game.turn,
+                history: room.game.history,
+                timeLeft: room.game.timeLeft,
+                lastMoveTime: room.game.lastMoveTime
+            });
+        }
 
         // Handle disconnect within room context
         socket.on('disconnect', () => {
@@ -92,14 +106,28 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Timer Check BEFORE move
+        const timeOk = room.game.updateTimer();
+        if (!timeOk) {
+            io.to(roomId).emit('game_over', { winner: room.game.turn === 'red' ? 'black' : 'red', reason: 'timeout' });
+            return;
+        }
+
         const success = room.game.makeMove(from.x, from.y, to.x, to.y);
 
         if (success) {
+            // Restart timer for next player (since turn checked in makeMove, we need to be careful)
+            // makeMove switches turn. So now it is NEXT player's turn. 
+            // We need to set startTimer() to marks the beginning of their turn.
+            room.game.startTimer();
+
             io.to(roomId).emit('update', {
                 board: room.game.board,
                 turn: room.game.turn,
                 lastMove: { from, to },
-                history: room.game.history
+                history: room.game.history,
+                timeLeft: room.game.timeLeft,
+                lastMoveTime: room.game.lastMoveTime
             });
 
             if (room.game.winner) {
@@ -118,11 +146,19 @@ io.on('connection', (socket) => {
         if (room.players.red !== socket.id && room.players.black !== socket.id) return;
 
         room.game = new XiangqiGame();
+
+        // If both players still here, start timer
+        if (room.players.red && room.players.black) {
+            room.game.startTimer();
+        }
+
         io.to(roomId).emit('update', {
             board: room.game.board,
             turn: room.game.turn,
             history: [],
-            restart: true
+            restart: true,
+            timeLeft: room.game.timeLeft,
+            lastMoveTime: room.game.lastMoveTime
         });
     });
 });
