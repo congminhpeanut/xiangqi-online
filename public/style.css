@@ -308,9 +308,21 @@ input:focus {
 
 .xiangqi-board {
     position: relative;
+    /* 
+       Robust Sizing Strategy:
+       1. Drive size via Width (width: 100%).
+       2. Constrain Width so correct Aspect Ratio results in Height <= Max Height.
+       3. Max Height desired: ~65vh.
+       4. Max Width = 65vh * (9/10) = 58.5vh.
+       5. Also respect original max-width of 480px.
+    */
     width: 100%;
-    max-width: 480px;
+    max-width: min(480px, 58vh);
+    /* 65vh * 0.9 is 58.5vh, rounding down safe */
     aspect-ratio: 9 / 10;
+    height: auto;
+    margin: 0 auto;
+    /* Center board */
 
     /* Wood Texture Generation */
     background-color: var(--board-bg-light);
@@ -628,4 +640,89 @@ input:focus {
 .move-indicator:hover .target {
     background: rgba(255, 0, 0, 0.2);
     cursor: pointer;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .game-container {
+        padding: 0.5rem;
+        height: 100vh;
+        justify-content: flex-start;
+        /* Start from top to avoid center bias pushing content out */
+    }
+
+    .game-header {
+        margin-bottom: 0.5rem;
+        gap: 0.3rem;
+        flex-shrink: 0;
+        /* Prevent header from shrinking too much but allow board to shrink */
+    }
+
+    .player-bar {
+        padding: 0.3rem 0.5rem;
+    }
+
+    .avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
+    }
+
+    .name {
+        font-size: 0.8rem;
+    }
+
+    .timer {
+        font-size: 1rem;
+    }
+
+    /* Important: Constrain board height on mobile so it doesn't push buttons off */
+    .board-wrapper {
+        flex: 1;
+        /* Take available space but allow shrinking */
+        min-height: 0;
+        /* Crucial for flex containers to shrink contents */
+        display: flex;
+        align-items: center;
+        margin: 0.5rem 0;
+    }
+
+    .xiangqi-board {
+        /*
+           Mobile Sizing:
+           Max Height desired: ~60vh.
+           Max Width = 60vh * 0.9 = 54vh.
+        */
+        width: 100%;
+        max-width: 54vh;
+        aspect-ratio: 9 / 10;
+        height: auto;
+        margin: 0 auto;
+        /* Center it */
+        /* Overwrite any defaults */
+        max-height: none;
+    }
+
+    .game-controls {
+        flex-shrink: 0;
+        /* Don't let controls shrink/vanish */
+        margin-top: 0;
+        margin-bottom: 1rem;
+        padding-bottom: env(safe-area-inset-bottom);
+        /* iPhone X+ safe area */
+    }
+
+    .btn.small {
+        padding: 0.8rem 1rem;
+        /* Larger touch targets */
+        font-size: 0.9rem;
+    }
+
+    .subtitle {
+        font-size: 0.9rem;
+    }
+
+    .card h1 {
+        font-size: 2rem;
+    }
 }
