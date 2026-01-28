@@ -98,6 +98,12 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return;
 
+        // Check if both players are present
+        if (!room.players.red || !room.players.black) {
+            socket.emit('error', 'Waiting for opponent to join!');
+            return;
+        }
+
         // Validation: Is it this player's turn?
         const playerRole = room.players.red === socket.id ? 'red' : (room.players.black === socket.id ? 'black' : 'spectator');
 
