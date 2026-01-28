@@ -204,26 +204,59 @@ input:focus {
 /* Header & Status */
 .game-header {
     display: flex;
-    flex-direction: column;
-    /* Stack on mobile, row on desktop? Keep compact */
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-}
-
-.player-bar {
-    display: flex;
+    flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    background: rgba(0, 0, 0, 0.3);
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    width: 100%;
+}
+
+/* Ensure status takes only necessary space */
+.status-display {
+    display: flex;
+    align-items: center;
+    position: relative;
+    height: auto;
+    flex: 1;
+    /* Allow it to take space if needed */
+    justify-content: flex-start;
+    /* Align left */
 }
 
 .player-info {
     display: flex;
     align-items: center;
     gap: 0.8rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Specific styling for the bottom player info to center it or align correctly */
+#bottom-player {
+    align-self: flex-start;
+    /* Or center? Let's check container */
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.5rem;
+    justify-content: flex-start;
+    /* Align avatar left */
+}
+
+/* Top player specific alignment if needed */
+#top-player {
+    /* Align to right side content */
+    flex-direction: row-reverse;
+    /* Avatar on far right looks nice for 'opponent' */
+    justify-content: flex-end;
+}
+
+#top-player .details {
+    align-items: flex-end;
+    /* Text align right */
+    text-align: right;
 }
 
 .avatar {
@@ -277,12 +310,7 @@ input:focus {
     }
 }
 
-.status-display {
-    display: flex;
-    justify-content: center;
-    position: relative;
-    height: 2rem;
-}
+
 
 /* Turn Indicator */
 #turn-indicator {
@@ -653,9 +681,10 @@ input:focus {
 
     .game-header {
         margin-bottom: 0.5rem;
-        gap: 0.3rem;
+        gap: 0.5rem;
         flex-shrink: 0;
         /* Prevent header from shrinking too much but allow board to shrink */
+        width: 100%;
     }
 
     .player-bar {
