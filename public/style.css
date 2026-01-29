@@ -682,7 +682,7 @@ input:focus {
 @media (max-width: 768px) {
     .game-container {
         padding: 0.5rem;
-        height: 100vh;
+        height: 100dvh;
         justify-content: flex-start;
         /* Start from top to avoid center bias pushing content out */
     }
@@ -737,14 +737,14 @@ input:focus {
         /*
            Robust Sizing Strategy:
            1. Width must never exceed 96% of viewport width (horizontal constraint).
-           2. Width must never result in a height > 60% of viewport height (vertical constraint).
+           2. Width must never result in a height > 50% of viewport height (vertical constraint).
               Height = Width / 0.9.
-              MaxHeight = 60dvh.
-              MaxWidth = 60dvh * 0.9 = 54dvh.
+              MaxHeight = 50dvh.
+              MaxWidth = 50dvh * 0.9 = 45dvh.
            
-           Solution: width: min(96vw, 54dvh);
+           Solution: width: min(96vw, 45dvh);
         */
-        width: min(96vw, 54dvh);
+        width: min(96vw, 45dvh);
         height: auto;
         aspect-ratio: 9 / 10;
         margin: 0 auto;
