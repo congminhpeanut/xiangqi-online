@@ -9,7 +9,7 @@ const PIECES = {
     'rso': { char: '兵', color: '#d00' },
 
     // Black Pieces
-    'bge': { char: '將', color: '#111' }, // Darker black for better contrast
+    'bge': { char: '將', color: '#111' },
     'bad': { char: '士', color: '#111' },
     'bel': { char: '象', color: '#111' },
     'bma': { char: '馬', color: '#111' },
@@ -22,35 +22,37 @@ function getPieceSVG(type) {
     const data = PIECES[type];
     if (!data) return '';
 
-    const isRed = data.color === '#d00';
-    // Subtle gradient colors
-    const woodLight = '#f6e4c4';
-    const woodDark = '#deb887';
-
-    // We can use a unique ID for gradients per piece type or just generic ones if defined in HTML. 
-    // Since we are returning strings, let's embed the standard defs once or use inline styles.
-    // Simpler: inline radial gradient in style attribute or defs inside each SVG (a bit redundant but safe).
+    // Premium Wood Gradient Colors
+    const woodLight = '#f0d09c';
+    const woodDark = '#d4a66a';
 
     return `
     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-            <radialGradient id="grad-${type}" cx="30%" cy="30%" r="70%">
-                <stop offset="0%" style="stop-color:${woodLight};stop-opacity:1" />
-                <stop offset="100%" style="stop-color:${woodDark};stop-opacity:1" />
-            </radialGradient>
-            <filter id="shadow-${type}">
-                <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
-            </filter>
-        </defs>
+        <!-- References global defs in index.html -->
         
-        <!-- Main Body with Gradient -->
-        <circle cx="50" cy="50" r="45" fill="url(#grad-${type})" stroke="${data.color}" stroke-width="4" filter="url(#shadow-${type})" />
+        <!-- Drop Shadow Group -->
+        <g filter="url(#piece-shadow)">
+            <!-- Main Body -->
+            <circle cx="50" cy="50" r="44" fill="url(#grad-wood)"/>
+            
+            <!-- Outer Ring (Bevel) -->
+            <circle cx="50" cy="50" r="44" fill="none" stroke="url(#grad-bevel)" stroke-width="2"/>
+            
+            <!-- Inner Ring (Groove) -->
+            <circle cx="50" cy="50" r="36" fill="none" stroke="#8b5a2b" stroke-width="1.5" opacity="0.8"/>
+            <circle cx="50" cy="50" r="32" fill="none" stroke="#8b5a2b" stroke-width="0.5" opacity="0.6"/>
+        </g>
         
-        <!-- Inner Groove -->
-        <circle cx="50" cy="50" r="36" fill="none" stroke="${data.color}" stroke-width="2" opacity="0.6" />
-        
-        <!-- Character -->
-        <text x="50" y="68" font-family="'KaiTi', 'SimKai', 'Kaiti SC', 'STKaiti', serif" font-size="48" fill="${data.color}" text-anchor="middle" font-weight="bold" style="text-shadow: 1px 1px 0px rgba(255,255,255,0.4);">${data.char}</text>
+        <!-- Engraved Character -->
+        <text x="50" y="66" 
+            font-family="'KaiTi', 'SimKai', 'Kaiti SC', 'STKaiti', serif" 
+            font-size="44" 
+            fill="${data.color}" 
+            text-anchor="middle" 
+            font-weight="bold" 
+            style="text-shadow: 0px 1px 0px rgba(255,255,255,0.3), 0px -1px 0px rgba(0,0,0,0.2); filter: url(#engrave);">
+            ${data.char}
+        </text>
     </svg>
     `;
 }

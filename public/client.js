@@ -473,33 +473,226 @@ function startCountdown() {
 
 // --- Socket Events ---
 
-socket.on('init', (data) => {
-    myRole = data.role;
-    currentRoom = data.room;
-    boardState = data.fen;
+// --- LOGIC: Check Detection & Captures ---
+
+const INITIAL_COUNTS = {
+    'red': { 'rge': 1, 'rad': 2, 'rel': 2, 'rma': 2, 'rro': 2, 'rca': 2, 'rso': 5 },
+    'black': { 'bge': 1, 'bad': 2, 'bel': 2, 'bma': 2, 'bro': 2, 'bca': 2, 'bso': 5 }
+};
+
+function getPieceType(piece) {
+    return piece; // piece string is key (e.g. 'rro')
+}
+
+function calculateCaptures(board) {
+    const currentCounts = {};
+    // Init with 0
+    Object.keys(INITIAL_COUNTS.red).forEach(k => currentCounts[k] = 0);
+    Object.keys(INITIAL_COUNTS.black).forEach(k => currentCounts[k] = 0);
+
+    // Count board
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 9; x++) {
+            const p = board[y][x];
+            if (p) currentCounts[p] = (currentCounts[p] || 0) + 1;
+        }
+    }
+
+    const captures = { redLost: [], blackLost: [] };
+
+    // Diff Red (What Red lost)
+    for (const [key, max] of Object.entries(INITIAL_COUNTS.red)) {
+        const count = currentCounts[key] || 0;
+        const lost = max - count;
+        for (let i = 0; i < lost; i++) captures.redLost.push(key);
+    }
+
+    // Diff Black (What Black lost)
+    for (const [key, max] of Object.entries(INITIAL_COUNTS.black)) {
+        const count = currentCounts[key] || 0;
+        const lost = max - count;
+        for (let i = 0; i < lost; i++) captures.blackLost.push(key);
+    }
+
+    return captures;
+}
+
+function renderGraveyard(captures) {
+    const topBin = document.getElementById('graveyard-top');
+    const btmBin = document.getElementById('graveyard-bottom');
+    topBin.innerHTML = '';
+    btmBin.innerHTML = '';
+
+    // Logic: 
+    // If I am Red (bottom), I want to see what I captured (Black pieces) in MY tray? 
+    // OR see what I LOST in my tray? 
+    // Standard: "Trophies" (captured) are usually shown.
+    // Let's show:
+    // Bottom (Me) -> Captured Enemy Pieces.
+    // Top (Opponent) -> Captured My Pieces.
+
+    let myCaptures = [];
+    let opCaptures = [];
+
+    if (myRole === 'red') {
+        myCaptures = captures.blackLost; // I killed these
+        opCaptures = captures.redLost;   // Opponent killed these
+    } else if (myRole === 'black') {
+        myCaptures = captures.redLost;
+        opCaptures = captures.blackLost;
+    } else {
+        // Spec: Red at bottom
+        myCaptures = captures.blackLost;
+        opCaptures = captures.redLost;
+    }
+
+    const addIcon = (container, type) => {
+        const el = document.createElement('div');
+        el.className = 'piece mini';
+        el.innerHTML = getPieceSVG(type);
+        container.appendChild(el);
+    };
+
+    myCaptures.forEach(c => addIcon(btmBin, c));
+    opCaptures.forEach(c => addIcon(topBin, c));
+}
+
+function findKing(board, color) {
+    const suffix = color === 'red' ? 'rge' : 'bge';
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 9; x++) {
+            if (board[y][x] === suffix) return { x, y };
+        }
+    }
+    return null;
+}
+
+function isSquareAttacked(board, tx, ty, attackerColor) {
+    // Brute force: check every enemy piece if it can move to tx, ty
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 9; x++) {
+            const p = board[y][x];
+            if (p) {
+                const pColor = p.startsWith('r') ? 'red' : 'black';
+                if (pColor === attackerColor) {
+                    if (Rules.isValidMove(board, x, y, tx, ty, attackerColor)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function isCheck(board, defenderColor) {
+    const kingPos = findKing(board, defenderColor);
+    if (!kingPos) return false; // Should not happen
+    const attacker = defenderColor === 'red' ? 'black' : 'red';
+    return isSquareAttacked(board, kingPos.x, kingPos.y, attacker);
+}
+
+
+// --- SOUNDS UPDATED ---
+
+function playCheckSound() {
+    if (!audioCtx) initAudio();
+    if (!audioCtx || audioCtx.state !== 'running') return;
+
+    const t = audioCtx.currentTime;
+    // Urgent double beep
+    const playBeep = (time) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, time);
+        osc.frequency.exponentialRampToValueAtTime(600, time + 0.15);
+
+        gain.gain.setValueAtTime(0.3, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(time);
+        osc.stop(time + 0.2);
+    };
+
+    playBeep(t);
+    playBeep(t + 0.18);
+}
+
+
+// --- UPDATE HANDLER ---
+
+socket.on('update', (data) => {
+    boardState = data.board;
     gameTurn = data.turn;
 
     if (data.timeLeft) timeLeft = data.timeLeft;
     if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
 
-    // Attempt to recover lastMove from data if available, or cleared
+    if (data.lastMove) lastMove = data.lastMove;
+
+    renderBoard();
+    updateTimers();
+    updateStatus();
+
+    // 1. Captures
+    const diffs = calculateCaptures(boardState);
+    renderGraveyard(diffs);
+
+    // 2. Visual Effects & Sounds
     if (data.lastMove) {
-        lastMove = data.lastMove;
-    } else {
-        lastMove = null;
+        playSound(data.lastMove.captured);
+        if (data.lastMove.captured) {
+            boardEl.classList.add('capture-flash');
+            setTimeout(() => boardEl.classList.remove('capture-flash'), 500);
+        }
     }
 
-    // Set board orientation
-    // If I am Red, Black is Top (true).
-    // If I am Black, Red is Top (false) -> I am at bottom.
-    // Spec sees standard (Red at bottom -> Black at top -> true).
-    if (myRole === 'black') {
-        isBlackTop = false;
+    // 3. Check Detection
+    // Check if MY King is in check? Or current turn player?
+    // Usually "Check" alert is for the player whose turn it is now (they are in trouble).
+    const isRedTurn = gameTurn === 'red';
+    const checkRed = isCheck(boardState, 'red');
+    const checkBlack = isCheck(boardState, 'black');
+
+    // We only care if the CURRENT player is in check (immediate threat)
+    const inCheckNow = isRedTurn ? checkRed : checkBlack;
+
+    if (inCheckNow) {
+        boardEl.classList.add('check-alert');
+        // Only play sound if it's the first render of this state or standard alert
+        playCheckSound();
+        messageArea.innerText = "CHECK!";
     } else {
-        isBlackTop = true;
+        boardEl.classList.remove('check-alert');
+        messageArea.innerText = "";
     }
 
-    // Update UI info
+    if (data.lastMoveTime) {
+        if (!timerInterval && !data.winner) startCountdown();
+    } else {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+});
+
+socket.on('init', (data) => {
+    // ... Copy of init logic, but ensuring we trigger captures render
+    myRole = data.role;
+    currentRoom = data.room;
+    boardState = data.fen;
+    gameTurn = data.turn;
+    if (data.timeLeft) timeLeft = data.timeLeft;
+    if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
+    lastMove = data.lastMove || null;
+
+    if (myRole === 'black') isBlackTop = false;
+    else isBlackTop = true;
+
     const me = document.querySelector('#bottom-player .name');
     const op = document.querySelector('#top-player .name');
 
@@ -514,47 +707,19 @@ socket.on('init', (data) => {
     showScreen('game');
     renderBoard();
     updateStatus();
+
+    // Initial renders
+    const diffs = calculateCaptures(boardState);
+    renderGraveyard(diffs);
+
+    // Initial check check
+    const isRedTurn = gameTurn === 'red';
+    const inCheckNow = isCheck(boardState, gameTurn);
+    if (inCheckNow) boardEl.classList.add('check-alert');
+    else boardEl.classList.remove('check-alert');
+
     startCountdown();
-
-    // URL
     history.pushState({}, '', `?room=${currentRoom}`);
-});
-
-socket.on('update', (data) => {
-    boardState = data.board;
-    gameTurn = data.turn;
-
-    if (data.timeLeft) timeLeft = data.timeLeft;
-    if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
-
-    // Store last move for highlighting
-    if (data.lastMove) {
-        lastMove = data.lastMove;
-    }
-
-    renderBoard();
-    // Update timers immediately to show current server state (e.g. reset to 10:00)
-    updateTimers();
-    updateStatus();
-
-    // Play sound
-    if (data.lastMove) {
-        playSound(data.lastMove.captured);
-    }
-
-    // Timer Control:
-    // If we have a lastMoveTime, the game clock is running -> ensure we are counting down locally.
-    // If NO lastMoveTime (e.g. restart or just joined new game), the clock is STOPPED -> clear interval.
-    if (data.lastMoveTime) {
-        if (!timerInterval && !data.winner) {
-            startCountdown();
-        }
-    } else {
-        if (timerInterval) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-        }
-    }
 });
 
 socket.on('player_joined', (data) => {
