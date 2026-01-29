@@ -70,7 +70,7 @@ io.on('connection', (socket) => {
 
         // If both players are present, start the timer (if not already started)
         if (room.players.red && room.players.black && !room.game.lastMoveTime && room.game.history.length === 0) {
-            room.game.startTimer();
+            // room.game.startTimer(); // WAIT for first move
             io.to(roomId).emit('update', {
                 board: room.game.board,
                 turn: room.game.turn,
@@ -155,7 +155,7 @@ io.on('connection', (socket) => {
 
         // If both players still here, start timer
         if (room.players.red && room.players.black) {
-            room.game.startTimer();
+            // room.game.startTimer(); // WAIT
         }
 
         io.to(roomId).emit('update', {

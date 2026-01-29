@@ -533,11 +533,27 @@ socket.on('update', (data) => {
     }
 
     renderBoard();
+    // Update timers immediately to show current server state (e.g. reset to 10:00)
+    updateTimers();
     updateStatus();
 
     // Play sound
     if (data.lastMove) {
         playSound(data.lastMove.captured);
+    }
+
+    // Timer Control:
+    // If we have a lastMoveTime, the game clock is running -> ensure we are counting down locally.
+    // If NO lastMoveTime (e.g. restart or just joined new game), the clock is STOPPED -> clear interval.
+    if (data.lastMoveTime) {
+        if (!timerInterval && !data.winner) {
+            startCountdown();
+        }
+    } else {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
     }
 });
 
