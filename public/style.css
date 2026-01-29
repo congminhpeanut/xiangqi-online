@@ -199,6 +199,8 @@ input:focus {
     max-width: 600px;
     /* Constrain width for desktop */
     height: 100vh;
+    /* Fallback */
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     padding: 1rem;
@@ -733,24 +735,28 @@ input:focus {
     .xiangqi-board {
         /*
            Mobile Sizing:
-           Max Height desired: ~60vh.
-           Max Width = 60vh * 0.9 = 54vh.
+           Max Height desired: ~55dvh to leave room for header/footer.
+           Max Width = 55dvh * 0.9 = 49.5dvh.
         */
         width: 100%;
-        max-width: 54vh;
+        max-width: 50vh;
+        /* Fallback */
+        max-width: 50dvh;
         aspect-ratio: 9 / 10;
         height: auto;
         margin: 0 auto;
         /* Center it */
         /* Overwrite any defaults */
-        max-height: none;
+        max-height: 55vh;
+        /* Fallback */
+        max-height: 55dvh;
     }
 
     .game-controls {
         flex-shrink: 0;
         /* Don't let controls shrink/vanish */
         margin-top: 0;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
         padding-bottom: env(safe-area-inset-bottom);
         /* iPhone X+ safe area */
     }
