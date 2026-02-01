@@ -50,6 +50,11 @@ class XiangqiGame {
         return true;
     }
 
+    deductTime(color, ms) {
+        this.timeLeft[color] -= ms;
+        if (this.timeLeft[color] < 0) this.timeLeft[color] = 0;
+    }
+
     getPiece(x, y) {
         if (x < 0 || x > 8 || y < 0 || y > 9) return null;
         return this.board[y][x];

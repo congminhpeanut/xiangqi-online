@@ -196,11 +196,25 @@ io.on('connection', (socket) => {
         room.game.updateTimer();
 
         // Calculate Move
-        const move = room.ai.getBestMove(room.game, 'black');
+        const startTime = Date.now();
+
+        // Determine Time Limit based on difficulty
+        let timeLimit = 3000; // default extreme
+        if (room.difficulty === 'hard') timeLimit = 1500;
+        if (room.difficulty === 'normal') timeLimit = 800;
+        if (room.difficulty === 'easy') timeLimit = 400;
+
+        const move = room.ai.getBestMove(room.game, 'black', timeLimit);
+
+        const endTime = Date.now();
+        const thinkTime = endTime - startTime;
+
+        // Deduct AI thinking time
+        room.game.deductTime('black', thinkTime);
 
         if (move) {
             room.game.makeMove(move.from.x, move.from.y, move.to.x, move.to.y);
-            room.game.startTimer(); // Restart timer for human
+            room.game.startTimer(); // Restart timer for human (sets lastMoveTime to NOW)
 
             io.to(roomId).emit('update', {
                 board: room.game.board,

@@ -79,40 +79,91 @@ class AI {
     }
 
     // Main entry point
-    getBestMove(game, color) {
-        const depth = this.getDepth();
-        const maximize = (color === 'red'); // Red wants +Score, Black wants -Score
+    getBestMove(game, color, timeLimitMs = 1500) {
+        // Defaults if not provided
+        if (!timeLimitMs) {
+            switch (this.difficulty) {
+                case 'hard': timeLimitMs = 2000; break;
+                case 'extreme': timeLimitMs = 3000; break;
+                case 'normal': timeLimitMs = 1000; break;
+                default: timeLimitMs = 500; break;
+            }
+        }
+
+        const maximize = (color === 'red');
+        const startTime = Date.now();
 
         let bestMove = null;
-        let bestScore = maximize ? -Infinity : Infinity;
+        let globalBestScore = maximize ? -Infinity : Infinity;
 
-        // Generate all possible moves for root
-        const moves = this.getAllMoves(game, color);
+        // Iterative Deepening
+        // Start at depth 1, go up to max depth allowed by difficulty
+        const maxDepth = this.getDepth();
 
-        // Simpler ordering for root: captures first? Use naive sort or just shuffle to avoid repetition
-        moves.sort(() => Math.random() - 0.5);
+        for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
+            let iterationBestMove = null;
+            let iterationBestScore = maximize ? -Infinity : Infinity;
 
-        for (const move of moves) {
-            // Test move
-            const captured = game.board[move.to.y][move.to.x];
-            game.makeMove(move.from.x, move.from.y, move.to.x, move.to.y); // This switches turn inside
-
-            // Eval
-            const score = this.minimax(game, depth - 1, -Infinity, Infinity, !maximize);
-
-            // Undo
-            this.undoMove(game, move, captured);
-
-            if (maximize) {
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMove = move;
-                }
+            // Get all moves
+            const moves = this.getAllMoves(game, color);
+            // Sort moves: If we have a best move from previous depth, try it first! (PV Move)
+            if (bestMove) {
+                moves.sort((a, b) => {
+                    if (a.from.x === bestMove.from.x && a.from.y === bestMove.from.y &&
+                        a.to.x === bestMove.to.x && a.to.y === bestMove.to.y) return -1;
+                    return 0; // Stable sort otherwise
+                });
             } else {
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestMove = move;
+                // Random shuffle for variety on first pass
+                moves.sort(() => Math.random() - 0.5);
+            }
+
+            let timeOut = false;
+
+            console.log(`[AI] Depth ${currentDepth} starts. Moves: ${moves.length}`);
+
+            for (const move of moves) {
+                // Check time
+                if (Date.now() - startTime > timeLimitMs) {
+                    console.log(`[AI] Timeout at move ${move.from.x},${move.from.y}`);
+                    timeOut = true;
+                    break;
                 }
+
+                const captured = game.board[move.to.y][move.to.x];
+                game.makeMove(move.from.x, move.from.y, move.to.x, move.to.y);
+
+                const score = this.minimax(game, currentDepth - 1, -Infinity, Infinity, !maximize);
+
+                // console.log(`[AI] Move score: ${score}`);
+
+                this.undoMove(game, move, captured);
+
+                if (maximize) {
+                    if (score > iterationBestScore) {
+                        iterationBestScore = score;
+                        iterationBestMove = move;
+                    }
+                } else {
+                    if (score < iterationBestScore) {
+                        iterationBestScore = score;
+                        iterationBestMove = move;
+                    }
+                }
+            }
+
+            console.log(`[AI] Depth ${currentDepth} done. Best: ${iterationBestScore}`);
+
+
+            if (timeOut) {
+                // If we timed out during this depth, REJECT results of this depth (incomplete search)
+                // UNLESS we haven't found any move yet (depth 1 timeout? unlikely but fallback)
+                if (!bestMove && iterationBestMove) bestMove = iterationBestMove;
+                break;
+            } else {
+                // Completed depth successfully
+                bestMove = iterationBestMove;
+                globalBestScore = iterationBestScore;
             }
         }
 
