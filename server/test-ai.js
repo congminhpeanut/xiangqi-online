@@ -1,35 +1,30 @@
 const XiangqiGame = require('./game');
 const AI = require('./ai');
 
-function testAI() {
-    console.log("Initializing Game...");
-    const game = new XiangqiGame();
+// Test AI for BLACK player (as server calls it)
+console.log("=== Test AI for Black Player ===\n");
 
-    // Simulate some moves to get out of opening (optional)
-    // game.makeMove(...); 
+const game = new XiangqiGame();
 
-    console.log("Testing AI Levels...");
-    const levels = ['easy', 'normal', 'hard', 'extreme'];
+// First make a Red move to create realistic scenario
+console.log("Making initial Red move...");
+game.makeMove(0, 9, 0, 8); // Red Chariot moves forward
 
-    for (const level of levels) {
-        console.log(`\n--- Level: ${level} ---`);
-        const ai = new AI(level);
-        const startTime = Date.now();
+console.log("Current turn:", game.turn);
+console.log("Testing Easy mode first (quick)...\n");
 
-        try {
-            const move = ai.getBestMove(game, 'red'); // Predict move for Red (first move)
-            const duration = Date.now() - startTime;
+const ai = new AI('easy');
+const move = ai.getBestMove(game, 'black', 4000);
 
-            if (move) {
-                console.log(`Move found: (${move.from.x},${move.from.y}) -> (${move.to.x},${move.to.y})`);
-                console.log(`Time taken: ${duration}ms`);
-            } else {
-                console.log("No move found (Error?)");
-            }
-        } catch (e) {
-            console.error("AI Error:", e);
-        }
-    }
+if (move) {
+    console.log(`\n=== SUCCESS ===`);
+    console.log(`AI Move: (${move.from.x},${move.from.y}) -> (${move.to.x},${move.to.y})`);
+
+    // Verify move is valid
+    const piece = game.board[move.from.y][move.from.x];
+    console.log(`Piece at from: ${piece}`);
+    console.log(`Piece starts with 'b': ${piece && piece.startsWith('b')}`);
+} else {
+    console.log("\n=== FAIL ===");
+    console.log("No move returned!");
 }
-
-testAI();

@@ -185,11 +185,17 @@ io.on('connection', (socket) => {
 
     const handleAIMove = (roomId) => {
         const room = rooms[roomId];
-        if (!room || !room.ai) return;
+        if (!room || !room.ai) {
+            console.log('[AI Handler] No room or AI found');
+            return;
+        }
 
         // Check if game over already (e.g. player mated AI in previous turn logic?)
         // The previous block handles game_over check, but let's be safe.
-        if (room.game.winner) return;
+        if (room.game.winner) {
+            console.log('[AI Handler] Game already has winner');
+            return;
+        }
 
         // Timer Check for AI?
         // We can just update it.
@@ -199,23 +205,38 @@ io.on('connection', (socket) => {
         const startTime = Date.now();
 
         // Determine Time Limit based on difficulty
-        let timeLimit = 3000; // default extreme
-        if (room.difficulty === 'hard') timeLimit = 1500;
-        if (room.difficulty === 'normal') timeLimit = 800;
-        if (room.difficulty === 'easy') timeLimit = 400;
+        // Keep times short to avoid blocking event loop
+        let timeLimit = 20000; // Extreme: 20s (max safe blocking time)
+        if (room.difficulty === 'hard') timeLimit = 10000; // Hard: 10s
+        if (room.difficulty === 'normal') timeLimit = 5000; // Normal: 5s
+        if (room.difficulty === 'easy') timeLimit = 2000; // Easy: 2s
+
+        console.log(`[AI Handler] Starting AI search for room ${roomId}, difficulty: ${room.difficulty}`);
 
         const move = room.ai.getBestMove(room.game, 'black', timeLimit);
 
         const endTime = Date.now();
         const thinkTime = endTime - startTime;
 
+        console.log(`[AI Handler] AI returned move:`, move, `in ${thinkTime}ms`);
+
         // Deduct AI thinking time
         room.game.deductTime('black', thinkTime);
 
         if (move) {
-            room.game.makeMove(move.from.x, move.from.y, move.to.x, move.to.y);
+            console.log(`[AI Handler] Executing move: (${move.from.x},${move.from.y}) -> (${move.to.x},${move.to.y})`);
+            const moveSuccess = room.game.makeMove(move.from.x, move.from.y, move.to.x, move.to.y);
+            console.log(`[AI Handler] makeMove result: ${moveSuccess}`);
+
+            if (!moveSuccess) {
+                console.error('[AI Handler] Move failed! Trying to recover...');
+                // The move was invalid - this shouldn't happen but let's handle it
+                return;
+            }
+
             room.game.startTimer(); // Restart timer for human (sets lastMoveTime to NOW)
 
+            console.log(`[AI Handler] Emitting update to room ${roomId}`);
             io.to(roomId).emit('update', {
                 board: room.game.board,
                 turn: room.game.turn,
@@ -237,6 +258,7 @@ io.on('connection', (socket) => {
             // If getBestMove returns null, it means no moves. 
             // game.makeMove checks for winner at end of turn.
             // If AI cannot move, it is lost.
+            console.log('[AI Handler] No move found, AI loses');
             room.game.winner = 'red';
             io.to(roomId).emit('game_over', { winner: 'red' });
         }
