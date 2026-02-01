@@ -1,0 +1,75 @@
+/* AI Modal Styles */
+#ai-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+    backdrop-filter: blur(5px);
+}
+
+#ai-modal.hidden {
+    display: none;
+}
+
+.ai-dialog {
+    background: rgba(20, 15, 10, 0.95);
+    padding: 2rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    /* Ensure visibility */
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+
+.ai-dialog h2 {
+    color: #ffd700;
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+.difficulty-select {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.diff-options {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.btn-diff {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #eee;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.btn-diff:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.btn-diff.selected {
+    background: #e63946;
+    border-color: #e63946;
+    box-shadow: 0 0 10px rgba(230, 57, 70, 0.5);
+    font-weight: bold;
+}

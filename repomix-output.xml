@@ -1,0 +1,2778 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.agent/rules/rule.md
+.dockerignore
+.gitignore
+Dockerfile
+package.json
+public/client.js
+public/index.html
+public/pieces.js
+public/style.css
+server/game.js
+server/index.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".dockerignore">
+node_modules
+.git
+.idea
+.vscode
+*.log
+</file>
+
+<file path=".gitignore">
+node_modules/
+.env
+.DS_Store
+</file>
+
+<file path="Dockerfile">
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
+</file>
+
+<file path="package.json">
+{
+  "name": "chinese-chess-host",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "uuid": "^13.0.0"
+  }
+}
+</file>
+
+<file path=".agent/rules/rule.md">
+---
+trigger: always_on
+---
+
+## 👤 PERSONA / TONE
+You are a **senior full-stack engineer + game networking engineer**.
+- You are a **senior front-end game UI/VFX engineer** specialized in **web rendering (CSS, SVG, optional Canvas/WebGL)**.
+- Communicate in **clear, concise technical English**.
+- Prioritize **MVP improvements first**, then list **optional enhancements**.
+- Be explicit about **performance tradeoffs**, **accessibility**, and **cross-browser** constraints.
+- Output must be **actionable**, including **file-by-file patch plans**, **snippets**, and **verification steps**.
+## 🛠 CONSTRAINTS
+### Core Requirements
+1. **Do not break gameplay**: movement, turns, timers, WebSocket flow must remain functional.
+2. **No new heavy frameworks**. Allowed:
+   - Pure CSS/SVG/JS
+   - Small helper utilities inside existing files
+   - Optional: Canvas overlay for effects (must degrade gracefully)
+3. **Performance**:
+   - Must remain smooth on mid-range phones.
+   - Avoid costly layout thrashing; use transforms/opacities.
+   - Prefer `prefers-reduced-motion` support.
+4. **Cross-browser**: modern Chrome/Edge/Firefox/Safari.
+5. **Security**: do not introduce remote asset injection; prefer inline SVG, CSS, or local assets.
+6. **Maintain aesthetic**: premium “mahogany + gold + ink” theme; enhance clarity and feedback.
+</file>
+
+<file path="public/pieces.js">
+const PIECES = {
+    // Red Pieces
+    'rge': { char: '帥', color: '#d00' },
+    'rad': { char: '仕', color: '#d00' },
+    'rel': { char: '相', color: '#d00' },
+    'rma': { char: '傌', color: '#d00' },
+    'rro': { char: '俥', color: '#d00' },
+    'rca': { char: '炮', color: '#d00' },
+    'rso': { char: '兵', color: '#d00' },
+
+    // Black Pieces
+    'bge': { char: '將', color: '#111' },
+    'bad': { char: '士', color: '#111' },
+    'bel': { char: '象', color: '#111' },
+    'bma': { char: '馬', color: '#111' },
+    'bro': { char: '車', color: '#111' },
+    'bca': { char: '砲', color: '#111' },
+    'bso': { char: '卒', color: '#111' }
+};
+
+function getPieceSVG(type) {
+    const data = PIECES[type];
+    if (!data) return '';
+
+    // Premium Wood Gradient Colors
+    const woodLight = '#f0d09c';
+    const woodDark = '#d4a66a';
+
+    return `
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <!-- References global defs in index.html -->
+        
+        <!-- Drop Shadow Group -->
+        <g filter="url(#piece-shadow)">
+            <!-- Main Body -->
+            <circle cx="50" cy="50" r="44" fill="url(#grad-wood)"/>
+            
+            <!-- Outer Ring (Bevel) -->
+            <circle cx="50" cy="50" r="44" fill="none" stroke="url(#grad-bevel)" stroke-width="2"/>
+            
+            <!-- Inner Ring (Groove) -->
+            <circle cx="50" cy="50" r="36" fill="none" stroke="#8b5a2b" stroke-width="1.5" opacity="0.8"/>
+            <circle cx="50" cy="50" r="32" fill="none" stroke="#8b5a2b" stroke-width="0.5" opacity="0.6"/>
+        </g>
+        
+        <!-- Engraved Character -->
+        <text x="50" y="66" 
+            font-family="'KaiTi', 'SimKai', 'Kaiti SC', 'STKaiti', serif" 
+            font-size="44" 
+            fill="${data.color}" 
+            text-anchor="middle" 
+            font-weight="bold" 
+            style="text-shadow: 0px 1px 0px rgba(255,255,255,0.3), 0px -1px 0px rgba(0,0,0,0.2); filter: url(#engrave);">
+            ${data.char}
+        </text>
+    </svg>
+    `;
+}
+</file>
+
+<file path="server/game.js">
+const INITIAL_BOARD = [
+    ['bro', 'bma', 'bel', 'bad', 'bge', 'bad', 'bel', 'bma', 'bro'],
+    [null, null, null, null, null, null, null, null, null],
+    [null, 'bca', null, null, null, null, null, 'bca', null],
+    ['bso', null, 'bso', null, 'bso', null, 'bso', null, 'bso'],
+    [null, null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null, null],
+    ['rso', null, 'rso', null, 'rso', null, 'rso', null, 'rso'],
+    [null, 'rca', null, null, null, null, null, 'rca', null],
+    [null, null, null, null, null, null, null, null, null],
+    ['rro', 'rma', 'rel', 'rad', 'rge', 'rad', 'rel', 'rma', 'rro']
+];
+
+class XiangqiGame {
+    constructor() {
+        this.board = JSON.parse(JSON.stringify(INITIAL_BOARD));
+        this.turn = 'red'; // Red moves first
+        this.winner = null;
+        this.history = [];
+
+        // Timer settings (60 minutes in ms)
+        this.timeLimit = 60 * 60 * 1000;
+        this.timeLeft = {
+            red: this.timeLimit,
+            black: this.timeLimit
+        };
+        this.lastMoveTime = null; // Timestamp of the last move
+    }
+
+    // Call when the game actually starts (first move) or resumes
+    startTimer() {
+        this.lastMoveTime = Date.now();
+    }
+
+    // Deduct time for the current turn player
+    // Returns true if time is left, false if timeout
+    updateTimer() {
+        if (!this.lastMoveTime) return true;
+
+        const now = Date.now();
+        const elapsed = now - this.lastMoveTime;
+
+        this.timeLeft[this.turn] -= elapsed;
+        this.lastMoveTime = now;
+
+        if (this.timeLeft[this.turn] <= 0) {
+            this.timeLeft[this.turn] = 0;
+            return false; // Timeout
+        }
+        return true;
+    }
+
+    getPiece(x, y) {
+        if (x < 0 || x > 8 || y < 0 || y > 9) return null;
+        return this.board[y][x];
+    }
+
+    setPiece(x, y, piece) {
+        this.board[y][x] = piece;
+    }
+
+    switchTurn() {
+        this.turn = this.turn === 'red' ? 'black' : 'red';
+    }
+
+    isValidMove(fromX, fromY, toX, toY, color) {
+        // Basic bounds check
+        if (fromX < 0 || fromX > 8 || fromY < 0 || fromY > 9) return false;
+        if (toX < 0 || toX > 8 || toY < 0 || toY > 9) return false;
+        if (fromX === toX && fromY === toY) return false;
+
+        const piece = this.getPiece(fromX, fromY);
+        if (!piece) return false;
+
+        // Check ownership
+        const pieceColor = piece.charAt(0) === 'r' ? 'red' : 'black';
+        if (pieceColor !== color) return false;
+
+        // Check target (cannot capture own piece)
+        const target = this.getPiece(toX, toY);
+        if (target) {
+            const targetColor = target.charAt(0) === 'r' ? 'red' : 'black';
+            if (targetColor === color) return false;
+        }
+
+        // Piece-specific logic
+        const type = piece.slice(1);
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        let valid = false;
+
+        switch (type) {
+            case 'ge': // General (King)
+                // Orthogonal move 1 step
+                if ((absDx === 1 && absDy === 0) || (absDx === 0 && absDy === 1)) {
+                    // Must stay in palace
+                    const inPalaceX = toX >= 3 && toX <= 5;
+                    const inPalaceY = color === 'red' ? (toY >= 7 && toY <= 9) : (toY >= 0 && toY <= 2);
+                    if (inPalaceX && inPalaceY) valid = true;
+                }
+                // "Flying General" rule: if generals face each other with no pieces between -> can capture? 
+                // Usually implemented as "cannot make a move that leaves generals facing". 
+                // Capturing the general directly is rarely a "move" since the game ends BEFORE that, but let's stick to movement rules first.
+                break;
+
+            case 'ad': // Advisor
+                // Diagonal move 1 step
+                if (absDx === 1 && absDy === 1) {
+                    const inPalaceX = toX >= 3 && toX <= 5;
+                    const inPalaceY = color === 'red' ? (toY >= 7 && toY <= 9) : (toY >= 0 && toY <= 2);
+                    if (inPalaceX && inPalaceY) valid = true;
+                }
+                break;
+
+            case 'el': // Elephant
+                // Diagonal move 2 steps
+                if (absDx === 2 && absDy === 2) {
+                    // Cannot cross river
+                    const crossedRiver = color === 'red' ? toY < 5 : toY > 4;
+                    if (!crossedRiver) {
+                        // Check for blocking "elephant eye"
+                        const eyeX = fromX + dx / 2;
+                        const eyeY = fromY + dy / 2;
+                        if (!this.getPiece(eyeX, eyeY)) valid = true;
+                    }
+                }
+                break;
+
+            case 'ma': // Horse (Mao)
+                // L-shape: 1 ortho + 1 diag (total 2 in one dir, 1 in other)
+                if ((absDx === 1 && absDy === 2) || (absDx === 2 && absDy === 1)) {
+                    // Check for blocking "horse leg"
+                    // The leg is the adjacent intersection in the primary direction
+                    const legX = absDx === 2 ? fromX + dx / 2 : fromX;
+                    const legY = absDy === 2 ? fromY + dy / 2 : fromY;
+                    if (!this.getPiece(legX, legY)) valid = true;
+                }
+                break;
+
+            case 'ro': // Rook (Chariot)
+                // Orthogonal, any distance
+                if ((absDx > 0 && absDy === 0) || (absDx === 0 && absDy > 0)) {
+                    // Check path is clear
+                    if (this.isPathClear(fromX, fromY, toX, toY)) valid = true;
+                }
+                break;
+
+            case 'ca': // Cannon
+                // Move like rook if not capturing
+                // Jump over ONE piece if capturing
+                if ((absDx > 0 && absDy === 0) || (absDx === 0 && absDy > 0)) {
+                    const count = this.countPiecesBetween(fromX, fromY, toX, toY);
+                    if (!target) {
+                        // Move: path must be clear
+                        if (count === 0) valid = true;
+                    } else {
+                        // Capture: must jump exactly one piece (the screen)
+                        if (count === 1) valid = true;
+                    }
+                }
+                break;
+
+            case 'so': // Soldier
+                // Move forward 1 step.
+                // If crossed river, can also move sideways 1 step.
+                // Never backward.
+
+                // Red moves UP (-y), Black moves DOWN (+y)
+                const forward = color === 'red' ? -1 : 1;
+
+                // Check forward move
+                if (dx === 0 && dy === forward) {
+                    valid = true;
+                }
+                // Check side move
+                else if (absDx === 1 && dy === 0) {
+                    const crossedRiver = color === 'red' ? fromY <= 4 : fromY >= 5;
+                    if (crossedRiver) valid = true;
+                }
+                break;
+        }
+
+        return valid;
+    }
+
+    isPathClear(x1, y1, x2, y2) {
+        return this.countPiecesBetween(x1, y1, x2, y2) === 0;
+    }
+
+    countPiecesBetween(x1, y1, x2, y2) {
+        let count = 0;
+        const dx = Math.sign(x2 - x1);
+        const dy = Math.sign(y2 - y1);
+        let x = x1 + dx;
+        let y = y1 + dy;
+
+        while (x !== x2 || y !== y2) {
+            if (this.getPiece(x, y)) count++;
+            x += dx;
+            y += dy;
+        }
+        return count;
+    }
+
+    // Is the King of 'color' currently in check?
+    isInCheck(color) {
+        // Find King position
+        let kx, ky;
+        const kingType = color === 'red' ? 'rge' : 'bge'; // Red General / Black General
+
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                if (this.board[y][x] === kingType) {
+                    kx = x;
+                    ky = y;
+                    break;
+                }
+            }
+        }
+        if (kx === undefined) return true; // Should not happen, but effectively lost
+
+        // Check if any opponent piece can reach (kx, ky)
+        // Simplified: iterate all enemy pieces and see if they can capture King
+        const opponentColor = color === 'red' ? 'black' : 'red';
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                const p = this.board[y][x];
+                if (p && (p.startsWith(color === 'red' ? 'b' : 'r'))) {
+                    // Check if this piece can capture king
+                    // Note: We use basic move validation. 
+                    // Special case: Flying General. 
+                    // If p is the opposing General, validMove logic handles it? 
+                    // Wait, validMove(General) limits it to palace. 
+                    // Flying general is a special rule: Generarls cannot face each other on same file with no pieces.
+                    if (this.isValidMove(x, y, kx, ky, opponentColor)) return true;
+                }
+            }
+        }
+
+        // Flying General Special Check:
+        // If Kings are on same column with no pieces between -> Illegal state usually, 
+        // but depending on whose turn it is, it might be a Check.
+        // Actually, the player cannot MAKE a move that leaves Kings facing.
+        // So this isInCheck is called AFTER a move to see if that move was legal (didn't expose own King) 
+        // OR to see if it put enemy in check.
+        // Let's implement explicitly:
+        // Find other king
+        let okx, oky;
+        const otherKing = color === 'red' ? 'bge' : 'rge';
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                if (this.board[y][x] === otherKing) {
+                    okx = x;
+                    oky = y;
+                    break;
+                }
+            }
+        }
+
+        if (kx === okx) {
+            // Check pieces between
+            if (this.countPiecesBetween(kx, ky, okx, oky) === 0) {
+                return true; // Generals facing each other
+            }
+        }
+
+        return false;
+    }
+
+    // Try a move to see if it leaves own King in check
+    testMove(fromX, fromY, toX, toY, color) {
+        const savedTarget = this.board[toY][toX];
+        const savedSource = this.board[fromY][fromX];
+
+        // Execute
+        this.board[toY][toX] = savedSource;
+        this.board[fromY][fromX] = null;
+
+        const inCheck = this.isInCheck(color);
+
+        // Revert
+        this.board[fromY][fromX] = savedSource;
+        this.board[toY][toX] = savedTarget;
+
+        return !inCheck;
+    }
+
+    makeMove(fromX, fromY, toX, toY) {
+        if (this.winner) return false;
+
+        // 1. Basic Validation
+        if (!this.isValidMove(fromX, fromY, toX, toY, this.turn)) return false;
+
+        // 2. King Safety (Cannot expose self to check)
+        if (!this.testMove(fromX, fromY, toX, toY, this.turn)) return false;
+
+        // Execute Move
+        const captured = this.board[toY][toX];
+        this.board[toY][toX] = this.board[fromY][fromX];
+        this.board[fromY][fromX] = null;
+        this.history.push({ from: { x: fromX, y: fromY }, to: { x: toX, y: toY }, captured });
+
+        // Check if Enemy is Checkmated (or Stalemated - in Xiangqi stalemate IS a loss usually? No, Stalemate is usually a draw or loss depending on rule set, but standard is Loss for the one who cannot move)
+        // Switch turn first to check opponent's status
+        const nextColor = this.turn === 'red' ? 'black' : 'red';
+
+        // "Flying General" check happens in isInCheck
+
+        this.switchTurn();
+
+        // Check for Game Over (No legal moves for current player)
+        // Check for Game Over (No legal moves for current player)
+        if (!this.hasLegalMoves(this.turn)) {
+            // The player who cannot move loses. The OTHER player wins.
+            this.winner = this.turn === 'red' ? 'black' : 'red';
+        }
+
+        return true;
+    }
+
+    hasLegalMoves(color) {
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                const piece = this.board[y][x];
+                if (piece && piece.startsWith(color === 'red' ? 'r' : 'b')) {
+                    // Try all possible moves for this piece
+                    // Optimization: We don't need all, just ONE valid move
+                    // We can iterate board...
+                    for (let ty = 0; ty < 10; ty++) {
+                        for (let tx = 0; tx < 9; tx++) {
+                            if (this.isValidMove(x, y, tx, ty, color)) {
+                                if (this.testMove(x, y, tx, ty, color)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+}
+
+module.exports = XiangqiGame;
+</file>
+
+<file path="server/index.js">
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const XiangqiGame = require('./game');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+    }
+});
+
+// Serve frontend
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Room management
+const rooms = {};
+
+io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
+    socket.on('join_room', (roomId) => {
+        let room = rooms[roomId];
+
+        // Create room if not exists
+        if (!room) {
+            room = {
+                id: roomId,
+                game: new XiangqiGame(),
+                players: {
+                    red: null,
+                    black: null
+                },
+                spectators: []
+            };
+            rooms[roomId] = room;
+        }
+
+        // Assign Role
+        let role = 'spectator';
+        if (!room.players.red) {
+            room.players.red = socket.id;
+            role = 'red';
+        } else if (!room.players.black) {
+            room.players.black = socket.id;
+            role = 'black';
+        } else {
+            room.spectators.push(socket.id);
+        }
+
+        socket.join(roomId);
+
+        // Send initial state
+        socket.emit('init', {
+            role: role,
+            room: roomId,
+            fen: room.game.board, // We send the raw board array
+            turn: room.game.turn,
+            history: room.game.history,
+            isBlackTop: true, // Standard view
+            timeLeft: room.game.timeLeft,
+            lastMoveTime: room.game.lastMoveTime,
+            players: {
+                red: !!room.players.red,
+                black: !!room.players.black
+            }
+        });
+
+        // Notify others
+        io.to(roomId).emit('player_joined', { role: role });
+
+        // If both players are present, start the timer (if not already started)
+        if (room.players.red && room.players.black && !room.game.lastMoveTime && room.game.history.length === 0) {
+            // room.game.startTimer(); // WAIT for first move
+            io.to(roomId).emit('update', {
+                board: room.game.board,
+                turn: room.game.turn,
+                history: room.game.history,
+                timeLeft: room.game.timeLeft,
+                lastMoveTime: room.game.lastMoveTime,
+                players: {
+                    red: !!room.players.red,
+                    black: !!room.players.black
+                }
+            });
+        }
+
+        // Handle disconnect within room context
+        socket.on('disconnect', () => {
+            if (room.players.red === socket.id) {
+                room.players.red = null;
+                io.to(roomId).emit('player_left', { role: 'red' });
+            } else if (room.players.black === socket.id) {
+                room.players.black = null;
+                io.to(roomId).emit('player_left', { role: 'black' });
+            } else {
+                room.spectators = room.spectators.filter(id => id !== socket.id);
+            }
+        });
+    });
+
+    socket.on('make_move', ({ roomId, from, to }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+
+        // Check if both players are present
+        if (!room.players.red || !room.players.black) {
+            socket.emit('error', 'Waiting for opponent to join!');
+            return;
+        }
+
+        // Validation: Is it this player's turn?
+        const playerRole = room.players.red === socket.id ? 'red' : (room.players.black === socket.id ? 'black' : 'spectator');
+
+        if (playerRole !== room.game.turn) {
+            socket.emit('error', 'Not your turn');
+            return;
+        }
+
+        // Timer Check BEFORE move
+        const timeOk = room.game.updateTimer();
+        if (!timeOk) {
+            io.to(roomId).emit('game_over', { winner: room.game.turn === 'red' ? 'black' : 'red', reason: 'timeout' });
+            return;
+        }
+
+        const success = room.game.makeMove(from.x, from.y, to.x, to.y);
+
+        if (success) {
+            // Restart timer for next player (since turn checked in makeMove, we need to be careful)
+            // makeMove switches turn. So now it is NEXT player's turn. 
+            // We need to set startTimer() to marks the beginning of their turn.
+            room.game.startTimer();
+
+            io.to(roomId).emit('update', {
+                board: room.game.board,
+                turn: room.game.turn,
+                lastMove: { from, to },
+                history: room.game.history,
+                timeLeft: room.game.timeLeft,
+                lastMoveTime: room.game.lastMoveTime,
+                players: {
+                    red: !!room.players.red,
+                    black: !!room.players.black
+                }
+            });
+
+            if (room.game.winner) {
+                io.to(roomId).emit('game_over', { winner: room.game.winner });
+            }
+        } else {
+            socket.emit('invalid_move'); // Client should mostly prevent this, but just in case
+        }
+    });
+
+    socket.on('restart_game', (roomId) => {
+        const room = rooms[roomId];
+        if (!room) return;
+
+        // Only players can restart
+        if (room.players.red !== socket.id && room.players.black !== socket.id) return;
+
+        room.game = new XiangqiGame();
+
+        // If both players still here, start timer
+        if (room.players.red && room.players.black) {
+            // room.game.startTimer(); // WAIT
+        }
+
+        io.to(roomId).emit('update', {
+            board: room.game.board,
+            turn: room.game.turn,
+            history: [],
+            restart: true,
+            timeLeft: room.game.timeLeft,
+            lastMoveTime: room.game.lastMoveTime,
+            players: {
+                red: !!room.players.red,
+                black: !!room.players.black
+            }
+        });
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+</file>
+
+<file path="public/index.html">
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Xiangqi | Real-time Chinese Chess</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div id="app">
+        <!-- Shared SVG Definitions -->
+        <svg width="0" height="0" style="position: absolute;">
+            <defs>
+                <!-- Wood Gradient -->
+                <radialGradient id="grad-wood" cx="30%" cy="30%" r="80%">
+                    <stop offset="0%" style="stop-color:#f0d09c;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#d4a66a;stop-opacity:1" />
+                </radialGradient>
+
+                <!-- Inner Bevel Gradient -->
+                <linearGradient id="grad-bevel" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:rgba(255,255,255,0.7);stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:rgba(0,0,0,0.5);stop-opacity:1" />
+                </linearGradient>
+
+                <!-- Drop Shadow -->
+                <filter id="piece-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feDropShadow dx="2" dy="4" stdDeviation="3" flood-color="rgba(0,0,0,0.6)" />
+                </filter>
+
+                <!-- Engraving Effect -->
+                <filter id="engrave">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="0.5" result="blur" />
+                    <feOffset in="blur" dx="0" dy="1" result="offsetBlur" />
+                    <feComposite in="offsetBlur" in2="SourceAlpha" operator="out" result="outerHighlight" />
+                    <feFlood flood-color="rgba(255,255,255,0.4)" result="highlightColor" />
+                    <feComposite in="highlightColor" in2="outerHighlight" operator="in" result="highlight" />
+                    <feMerge>
+                        <feMergeNode in="SourceGraphic" />
+                        <feMergeNode in="highlight" />
+                    </feMerge>
+                </filter>
+            </defs>
+        </svg>
+
+        <!-- Initial Lobby Screen -->
+        <div id="lobby-screen" class="screen">
+            <div class="card glass">
+                <h1>Xiangqi Online</h1>
+                <p class="subtitle">Real-time Chinese Chess</p>
+
+                <div class="actions">
+                    <button id="btn-create" class="btn primary">Create Match</button>
+                    <div class="divider">OR</div>
+                    <div class="join-form">
+                        <input type="text" id="input-room-id" placeholder="Enter Room ID">
+                        <button id="btn-join" class="btn secondary">Join Match</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen hidden">
+            <!-- Turn Notification Overlay -->
+            <div id="turn-notification">YOUR TURN</div>
+
+            <div class="game-container">
+                <header class="game-header">
+                    <div class="status-display">
+                        <div id="turn-indicator" class="badge">Red's Turn</div>
+                        <div id="message-area" class="message"></div>
+                    </div>
+
+                    <div class="player-info" id="top-player">
+                        <div class="avatar">👤</div>
+                        <div class="details">
+                            <span class="name">Opponent</span>
+                            <div class="timer" id="timer-top">60:00</div>
+                        </div>
+                        <div class="graveyard" id="graveyard-top"></div>
+                    </div>
+                </header>
+
+                <div class="board-wrapper">
+                    <div id="board" class="xiangqi-board">
+                        <!-- Grid and Pieces will be generated by JS -->
+                    </div>
+                </div>
+
+                <div class="player-info" id="bottom-player">
+                    <div class="avatar">👤</div>
+                    <div class="details">
+                        <span class="name">You</span>
+                        <div class="timer" id="timer-bottom">60:00</div>
+                    </div>
+                    <div class="graveyard" id="graveyard-bottom"></div>
+                </div>
+
+                <div class="game-controls">
+                    <button id="btn-copy-link" class="btn small">Copy Invite Link</button>
+                    <button id="btn-leave" class="btn small danger">Leave Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Game Over -->
+    <div id="modal-overlay" class="hidden">
+        <div class="modal glass">
+            <h2 id="modal-title">Game Over</h2>
+            <p id="modal-message"></p>
+            <div class="actions-row">
+                <button id="btn-restart" class="btn primary">Play Again</button>
+                <button id="btn-home" class="btn secondary">Home</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="pieces.js"></script>
+    <script src="client.js"></script>
+</body>
+
+</html>
+</file>
+
+<file path="public/client.js">
+const socket = io();
+
+// State
+let myRole = null; // 'red', 'black', 'spectator'
+let currentRoom = null;
+let boardState = []; // 10x9
+let selectedSquare = null; // {x, y}
+let lastMove = null; // {from: {x,y}, to: {x,y}}
+let isMyTurn = false;
+let gameTurn = 'red';
+let isBlackTop = true; // If I am red (or spec), Black is top. If I am black, Red is top (flipped).
+let timeLeft = { red: 3600000, black: 3600000 }; // 60 mins
+let lastMoveTime = null;
+let timerInterval = null;
+let presentPlayers = { red: false, black: false };
+
+// Turn Notification Overlay
+function showTurnNotification() {
+    const el = document.getElementById('turn-notification');
+    if (el) {
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 2000);
+    }
+}
+
+// Audio Context for synthesized sounds
+let audioCtx = null;
+
+// --- GAME RULES (Client Side) ---
+const Rules = {
+    getPiece(board, x, y) {
+        if (x < 0 || x > 8 || y < 0 || y > 9) return null;
+        return board[y][x];
+    },
+
+    countPiecesBetween(board, x1, y1, x2, y2) {
+        let count = 0;
+        const dx = Math.sign(x2 - x1);
+        const dy = Math.sign(y2 - y1);
+        let x = x1 + dx;
+        let y = y1 + dy;
+
+        while (x !== x2 || y !== y2) {
+            if (this.getPiece(board, x, y)) count++;
+            x += dx;
+            y += dy;
+        }
+        return count;
+    },
+
+    isPathClear(board, x1, y1, x2, y2) {
+        return this.countPiecesBetween(board, x1, y1, x2, y2) === 0;
+    },
+
+    isValidMove(board, fromX, fromY, toX, toY, color) {
+        const piece = this.getPiece(board, fromX, fromY);
+        if (!piece) return false;
+
+        // Basic bounds
+        if (toX < 0 || toX > 8 || toY < 0 || toY > 9) return false;
+        if (fromX === toX && fromY === toY) return false;
+
+        // Check ownership & target
+        const pieceColor = piece.charAt(0) === 'r' ? 'red' : 'black';
+        if (pieceColor !== color) return false;
+
+        const target = this.getPiece(board, toX, toY);
+        if (target) {
+            const targetColor = target.charAt(0) === 'r' ? 'red' : 'black';
+            if (targetColor === color) return false;
+        }
+
+        const type = piece.slice(1);
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        let valid = false;
+
+        switch (type) {
+            case 'ge': // General
+                if ((absDx === 1 && absDy === 0) || (absDx === 0 && absDy === 1)) {
+                    const inPalaceX = toX >= 3 && toX <= 5;
+                    const inPalaceY = color === 'red' ? (toY >= 7 && toY <= 9) : (toY >= 0 && toY <= 2);
+                    if (inPalaceX && inPalaceY) valid = true;
+                }
+                break;
+            case 'ad': // Advisor
+                if (absDx === 1 && absDy === 1) {
+                    const inPalaceX = toX >= 3 && toX <= 5;
+                    const inPalaceY = color === 'red' ? (toY >= 7 && toY <= 9) : (toY >= 0 && toY <= 2);
+                    if (inPalaceX && inPalaceY) valid = true;
+                }
+                break;
+            case 'el': // Elephant
+                if (absDx === 2 && absDy === 2) {
+                    const crossedRiver = color === 'red' ? toY < 5 : toY > 4;
+                    if (!crossedRiver) {
+                        const eyeX = fromX + dx / 2;
+                        const eyeY = fromY + dy / 2;
+                        if (!this.getPiece(board, eyeX, eyeY)) valid = true;
+                    }
+                }
+                break;
+            case 'ma': // Horse
+                if ((absDx === 1 && absDy === 2) || (absDx === 2 && absDy === 1)) {
+                    const legX = absDx === 2 ? fromX + dx / 2 : fromX;
+                    const legY = absDy === 2 ? fromY + dy / 2 : fromY;
+                    if (!this.getPiece(board, legX, legY)) valid = true;
+                }
+                break;
+            case 'ro': // Rook
+                if ((absDx > 0 && absDy === 0) || (absDx === 0 && absDy > 0)) {
+                    if (this.isPathClear(board, fromX, fromY, toX, toY)) valid = true;
+                }
+                break;
+            case 'ca': // Cannon
+                if ((absDx > 0 && absDy === 0) || (absDx === 0 && absDy > 0)) {
+                    const count = this.countPiecesBetween(board, fromX, fromY, toX, toY);
+                    if (!target) {
+                        if (count === 0) valid = true;
+                    } else {
+                        if (count === 1) valid = true;
+                    }
+                }
+                break;
+            case 'so': // Soldier
+                const forward = color === 'red' ? -1 : 1;
+                if (dx === 0 && dy === forward) {
+                    valid = true;
+                } else if (absDx === 1 && dy === 0) {
+                    const crossedRiver = color === 'red' ? fromY <= 4 : fromY >= 5;
+                    if (crossedRiver) valid = true;
+                }
+                break;
+        }
+        return valid;
+    },
+
+    getPossibleMoves(board, fromX, fromY, color) {
+        const moves = [];
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                if (this.isValidMove(board, fromX, fromY, x, y, color)) {
+                    moves.push({ x, y });
+                }
+            }
+        }
+        return moves;
+    }
+};
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+function playSound(isCapture) {
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const t = audioCtx.currentTime;
+
+    // Master Gain for this sound event
+    const master = audioCtx.createGain();
+    master.connect(audioCtx.destination);
+    master.gain.setValueAtTime(1.0, t); // Boost volume
+
+    // 1. Impact Noise (Wood Texture)
+    const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseBuffer.length; i++) {
+        output[i] = Math.random() * 2 - 1;
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseFilter = audioCtx.createBiquadFilter();
+    const noiseGain = audioCtx.createGain();
+
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(master); // Connect to master
+
+    // 2. Tonal Body (Resonance)
+    const osc = audioCtx.createOscillator();
+    const oscGain = audioCtx.createGain();
+    osc.connect(oscGain);
+    oscGain.connect(master);
+
+    // 3. Sub-bass (for heaviness)
+    const subOsc = audioCtx.createOscillator();
+    const subGain = audioCtx.createGain();
+    subOsc.connect(subGain);
+    subGain.connect(master);
+
+    if (isCapture) {
+        // --- HEAVY THUD (Capture) ---
+        // Noise: Low thud
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(800, t);
+        noiseFilter.frequency.exponentialRampToValueAtTime(100, t + 0.1);
+        noiseGain.gain.setValueAtTime(1.0, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+        noise.start(t);
+
+        // Body: Deep resonance
+        osc.frequency.setValueAtTime(120, t);
+        osc.frequency.exponentialRampToValueAtTime(60, t + 0.2);
+        oscGain.gain.setValueAtTime(0.8, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        osc.start(t);
+        osc.stop(t + 0.4);
+
+        // Sub: Rumble
+        subOsc.type = 'sine';
+        subOsc.frequency.setValueAtTime(50, t);
+        subOsc.frequency.linearRampToValueAtTime(30, t + 0.3);
+        subGain.gain.setValueAtTime(0.8, t);
+        subGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        subOsc.start(t);
+        subOsc.stop(t + 0.4);
+
+    } else {
+        // --- CRISP CLACK (Move) ---
+        // Noise: Sharp snap
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.setValueAtTime(1000, t);
+        noiseGain.gain.setValueAtTime(0.8, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+        noise.start(t);
+
+        // Body: Wood knock
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, t);
+        osc.frequency.exponentialRampToValueAtTime(500, t + 0.05); // Pitch shift up for "hard" surface
+        oscGain.gain.setValueAtTime(0.6, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+        osc.start(t);
+        osc.stop(t + 0.15);
+
+        // No sub for regular moves
+    }
+}
+
+function playFanfare(isVictory) {
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const t = audioCtx.currentTime;
+    const masterGain = audioCtx.createGain();
+    masterGain.connect(audioCtx.destination);
+    masterGain.gain.setValueAtTime(0.8, t); // Louder
+
+    // Helper for note
+    const playNote = (freq, time, dur, type = 'triangle', vol = 1.0) => {
+        const osc = audioCtx.createOscillator();
+        const gn = audioCtx.createGain();
+        osc.frequency.value = freq;
+        osc.type = type;
+        osc.connect(gn);
+        gn.connect(masterGain);
+        gn.gain.setValueAtTime(0, time);
+        gn.gain.linearRampToValueAtTime(vol, time + 0.05);
+        gn.gain.exponentialRampToValueAtTime(0.01, time + dur);
+        osc.start(time);
+        osc.stop(time + dur);
+    };
+
+    if (isVictory) {
+        // Epic Victory Fanfare (Gong + Chord)
+        // Gong-ish low sine
+        playNote(130.81, t, 3.0, 'sine', 1.0); // C3
+
+        // Chord C Major
+        playNote(261.63, t, 2.0, 'triangle', 0.8); // C4
+        playNote(329.63, t + 0.1, 2.0, 'triangle', 0.8); // E4
+        playNote(392.00, t + 0.2, 2.0, 'triangle', 0.8); // G4
+        playNote(523.25, t + 0.3, 2.5, 'triangle', 1.0); // C5 Highlight
+
+    } else {
+        // Defeat: Dismal Chord
+        playNote(196.00, t, 2.0, 'sawtooth', 0.6); // G3
+        playNote(155.56, t + 0.3, 2.0, 'sawtooth', 0.6); // Eb3
+        playNote(130.81, t + 0.6, 3.0, 'sawtooth', 0.8); // C3
+    }
+}
+
+function playCheckSound() {
+    if (!audioCtx) initAudio();
+    if (!audioCtx || audioCtx.state !== 'running') return;
+
+    const t = audioCtx.currentTime;
+    const msgGain = audioCtx.createGain();
+    msgGain.connect(audioCtx.destination);
+    msgGain.gain.setValueAtTime(1.0, t);
+
+    // Urgent Warning Bell
+    const playBell = (time) => {
+        const osc = audioCtx.createOscillator();
+        const gn = audioCtx.createGain();
+        osc.type = 'square'; // Harsh
+        osc.frequency.setValueAtTime(880, time); // High A5
+        osc.frequency.exponentialRampToValueAtTime(440, time + 0.2); // Drop
+
+        gn.gain.setValueAtTime(0.5, time);
+        gn.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+
+        osc.connect(gn);
+        gn.connect(msgGain);
+        osc.start(time);
+        osc.stop(time + 0.3);
+    };
+
+    playBell(t);
+    playBell(t + 0.15);
+    playBell(t + 0.3);
+}
+
+
+// DOM Elements
+const screens = {
+    lobby: document.getElementById('lobby-screen'),
+    game: document.getElementById('game-screen')
+};
+const btnCreate = document.getElementById('btn-create');
+const btnJoin = document.getElementById('btn-join');
+const inputRoomId = document.getElementById('input-room-id');
+const boardEl = document.getElementById('board');
+const turnIndicator = document.getElementById('turn-indicator');
+const timerTop = document.getElementById('timer-top');
+const timerBottom = document.getElementById('timer-bottom');
+const messageArea = document.getElementById('message-area');
+const btnCopy = document.getElementById('btn-copy-link');
+const btnLeave = document.getElementById('btn-leave');
+const modal = document.getElementById('modal-overlay');
+const modalTitle = document.getElementById('modal-title');
+const modalMsg = document.getElementById('modal-message');
+const modalInner = document.querySelector('.modal'); // Need to target inner for border styling
+const btnRestart = document.getElementById('btn-restart');
+const btnHome = document.getElementById('btn-home');
+
+
+// --- Helpers ---
+function showScreen(name) {
+    Object.values(screens).forEach(el => el.classList.add('hidden'));
+    screens[name].classList.remove('hidden');
+}
+
+function getBoardPos(x, y) {
+    let vicX = x;
+    let vicY = y;
+
+    if (!isBlackTop && myRole === 'black') {
+        vicX = 8 - x;
+        vicY = 9 - y;
+    }
+
+    return {
+        left: `calc((${vicX} * 100%) / 9)`,
+        top: `calc((${vicY} * 100%) / 10)`
+    };
+}
+
+function renderBoard() {
+    boardEl.innerHTML = `
+        <div class="river">楚 河 &nbsp;&nbsp;&nbsp;&nbsp; 漢 界</div>
+        <div class="palace-top"></div>
+        <div class="palace-bottom"></div>
+    `;
+
+    // Draw last move highlights
+    if (lastMove) {
+        // From
+        const fromDiv = document.createElement('div');
+        fromDiv.className = 'last-move-src';
+        const posFrom = getBoardPos(lastMove.from.x, lastMove.from.y);
+        fromDiv.style.left = `calc(${posFrom.left} + 5.55%)`; // Center it (11.11 / 2)
+        fromDiv.style.top = `calc(${posFrom.top} + 5%)`;     // Center it (10 / 2)
+        boardEl.appendChild(fromDiv);
+
+        // To
+        const toDiv = document.createElement('div');
+        toDiv.className = 'last-move-dest';
+        const posTo = getBoardPos(lastMove.to.x, lastMove.to.y);
+        toDiv.style.left = `calc(${posTo.left} + 5.55%)`;
+        toDiv.style.top = `calc(${posTo.top} + 5%)`;
+        boardEl.appendChild(toDiv);
+    }
+
+    // Draw pieces
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 9; x++) {
+            const piece = boardState[y][x];
+            if (piece) {
+                const el = document.createElement('div');
+                el.className = 'piece';
+                el.innerHTML = getPieceSVG(piece);
+                const pos = getBoardPos(x, y);
+                el.style.left = pos.left;
+                el.style.top = pos.top;
+
+                // Click handler
+                el.onclick = (e) => handleSquareClick(x, y);
+
+                if (selectedSquare && selectedSquare.x === x && selectedSquare.y === y) {
+                    el.classList.add('selected');
+                }
+
+                boardEl.appendChild(el);
+            }
+        }
+    }
+
+    // Indicators for VALID MOVES only
+    if (selectedSquare && isMyTurn) {
+        const moves = Rules.getPossibleMoves(boardState, selectedSquare.x, selectedSquare.y, myRole);
+
+        moves.forEach(move => {
+            const targetPiece = boardState[move.y][move.x];
+
+            // Create indicator
+            const el = document.createElement('div');
+            el.className = 'move-indicator';
+
+            const pos = getBoardPos(move.x, move.y);
+            el.style.left = pos.left;
+            el.style.top = pos.top;
+            el.onclick = (e) => {
+                e.stopPropagation(); // Prevent bubbling if needed
+                handleSquareClick(move.x, move.y);
+            };
+
+            const dot = document.createElement('div');
+            dot.className = targetPiece ? 'target' : 'dot';
+            el.appendChild(dot);
+
+            boardEl.appendChild(el);
+        });
+    }
+}
+
+function handleSquareClick(x, y) {
+    if (!isMyTurn) return;
+
+    const piece = boardState[y][x];
+    const isOwnPiece = piece && (
+        (myRole === 'red' && piece.startsWith('r')) ||
+        (myRole === 'black' && piece.startsWith('b'))
+    );
+
+    if (isOwnPiece) {
+        // Select logic
+        if (selectedSquare && selectedSquare.x === x && selectedSquare.y === y) {
+            selectedSquare = null; // Deselect
+        } else {
+            selectedSquare = { x, y };
+        }
+        renderBoard();
+    } else {
+        // Move logic
+        if (selectedSquare) {
+            // Validate client side first for instant feedback (optional but good)
+            if (Rules.isValidMove(boardState, selectedSquare.x, selectedSquare.y, x, y, myRole)) {
+                socket.emit('make_move', {
+                    roomId: currentRoom,
+                    from: selectedSquare,
+                    to: { x, y }
+                });
+                selectedSquare = null;
+                // No optimistic update, wait for server
+            } else {
+                // Shake or something?
+                console.log("Invalid move prevented by client.");
+            }
+        }
+    }
+}
+
+function updateStatus() {
+    const isRedTurn = gameTurn === 'red';
+    const turnText = isRedTurn ? "RED'S Turn" : "BLACK'S Turn";
+
+    turnIndicator.innerText = turnText;
+    // status styling updated in CSS
+    turnIndicator.style.borderColor = isRedTurn ? '#e63946' : '#111';
+    turnIndicator.style.color = isRedTurn ? '#e63946' : '#aaa';
+
+    const wasMyTurn = isMyTurn;
+    isMyTurn = (myRole === gameTurn);
+
+    if (!wasMyTurn && isMyTurn) {
+        // Only show notification if both players are present
+        if (presentPlayers.red && presentPlayers.black) {
+            showTurnNotification();
+        }
+        // Optional Haptic feedback
+        if (navigator.vibrate) navigator.vibrate(200);
+    }
+}
+
+function formatTime(ms) {
+    if (ms < 0) ms = 0;
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateTimers() {
+    // Only update if we have a lastMoveTime (game started)
+    let redTime = timeLeft.red;
+    let blackTime = timeLeft.black;
+
+    if (lastMoveTime) {
+        const now = Date.now();
+        const elapsed = now - lastMoveTime;
+        if (gameTurn === 'red') redTime -= elapsed;
+        else blackTime -= elapsed;
+    }
+
+    // Determine who is top/bottom
+    let bottomTime, topTime;
+
+    if (myRole === 'black') {
+        bottomTime = blackTime;
+        topTime = redTime;
+    } else {
+        bottomTime = redTime;
+        topTime = blackTime;
+    }
+
+    timerBottom.innerText = formatTime(bottomTime);
+    timerTop.innerText = formatTime(topTime);
+
+    // Styling for low time
+    if (bottomTime < 30000) timerBottom.classList.add('low');
+    else timerBottom.classList.remove('low');
+
+    if (topTime < 30000) timerTop.classList.add('low');
+    else timerTop.classList.remove('low');
+}
+
+function startCountdown() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        updateTimers();
+    }, 100); // 100ms for smoothness
+}
+
+// --- Socket Events ---
+
+// --- LOGIC: Check Detection & Captures ---
+
+const INITIAL_COUNTS = {
+    'red': { 'rge': 1, 'rad': 2, 'rel': 2, 'rma': 2, 'rro': 2, 'rca': 2, 'rso': 5 },
+    'black': { 'bge': 1, 'bad': 2, 'bel': 2, 'bma': 2, 'bro': 2, 'bca': 2, 'bso': 5 }
+};
+
+function getPieceType(piece) {
+    return piece; // piece string is key (e.g. 'rro')
+}
+
+function calculateCaptures(board) {
+    const currentCounts = {};
+    // Init with 0
+    Object.keys(INITIAL_COUNTS.red).forEach(k => currentCounts[k] = 0);
+    Object.keys(INITIAL_COUNTS.black).forEach(k => currentCounts[k] = 0);
+
+    // Count board
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 9; x++) {
+            const p = board[y][x];
+            if (p) currentCounts[p] = (currentCounts[p] || 0) + 1;
+        }
+    }
+
+    const captures = { redLost: [], blackLost: [] };
+
+    // Diff Red (What Red lost)
+    for (const [key, max] of Object.entries(INITIAL_COUNTS.red)) {
+        const count = currentCounts[key] || 0;
+        const lost = max - count;
+        for (let i = 0; i < lost; i++) captures.redLost.push(key);
+    }
+
+    // Diff Black (What Black lost)
+    for (const [key, max] of Object.entries(INITIAL_COUNTS.black)) {
+        const count = currentCounts[key] || 0;
+        const lost = max - count;
+        for (let i = 0; i < lost; i++) captures.blackLost.push(key);
+    }
+
+    return captures;
+}
+
+function renderGraveyard(captures) {
+    const topBin = document.getElementById('graveyard-top');
+    const btmBin = document.getElementById('graveyard-bottom');
+    topBin.innerHTML = '';
+    btmBin.innerHTML = '';
+
+    // Logic: 
+    // If I am Red (bottom), I want to see what I captured (Black pieces) in MY tray? 
+    // OR see what I LOST in my tray? 
+    // Standard: "Trophies" (captured) are usually shown.
+    // Let's show:
+    // Bottom (Me) -> Captured Enemy Pieces.
+    // Top (Opponent) -> Captured My Pieces.
+
+    let myCaptures = [];
+    let opCaptures = [];
+
+    if (myRole === 'red') {
+        myCaptures = captures.blackLost; // I killed these
+        opCaptures = captures.redLost;   // Opponent killed these
+    } else if (myRole === 'black') {
+        myCaptures = captures.redLost;
+        opCaptures = captures.blackLost;
+    } else {
+        // Spec: Red at bottom
+        myCaptures = captures.blackLost;
+        opCaptures = captures.redLost;
+    }
+
+    const addIcon = (container, type) => {
+        const el = document.createElement('div');
+        el.className = 'piece mini';
+        el.innerHTML = getPieceSVG(type);
+        container.appendChild(el);
+    };
+
+    myCaptures.forEach(c => addIcon(btmBin, c));
+    opCaptures.forEach(c => addIcon(topBin, c));
+}
+
+function findKing(board, color) {
+    const suffix = color === 'red' ? 'rge' : 'bge';
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 9; x++) {
+            if (board[y][x] === suffix) return { x, y };
+        }
+    }
+    return null;
+}
+
+function isSquareAttacked(board, tx, ty, attackerColor) {
+    // Brute force: check every enemy piece if it can move to tx, ty
+    for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 9; x++) {
+            const p = board[y][x];
+            if (p) {
+                const pColor = p.startsWith('r') ? 'red' : 'black';
+                if (pColor === attackerColor) {
+                    if (Rules.isValidMove(board, x, y, tx, ty, attackerColor)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function isCheck(board, defenderColor) {
+    const kingPos = findKing(board, defenderColor);
+    if (!kingPos) return false; // Should not happen
+    const attacker = defenderColor === 'red' ? 'black' : 'red';
+    return isSquareAttacked(board, kingPos.x, kingPos.y, attacker);
+}
+
+
+// --- SOUNDS UPDATED ---
+
+// Old playCheckSound removed, simplified into main audio block above
+
+
+// --- UPDATE HANDLER ---
+
+socket.on('update', (data) => {
+    boardState = data.board;
+    gameTurn = data.turn;
+
+    if (data.timeLeft) timeLeft = data.timeLeft;
+    if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
+
+    if (data.lastMove) lastMove = data.lastMove;
+
+    renderBoard();
+    updateTimers();
+    updateStatus();
+
+    // 1. Captures
+    const diffs = calculateCaptures(boardState);
+    renderGraveyard(diffs);
+
+    // 2. Visual Effects & Sounds
+    if (data.lastMove) {
+        playSound(data.lastMove.captured);
+        if (data.lastMove.captured) {
+            boardEl.classList.add('capture-flash');
+            setTimeout(() => boardEl.classList.remove('capture-flash'), 500);
+        }
+    }
+
+    // 3. Check Detection
+    // Check if MY King is in check? Or current turn player?
+    // Usually "Check" alert is for the player whose turn it is now (they are in trouble).
+    const isRedTurn = gameTurn === 'red';
+    const checkRed = isCheck(boardState, 'red');
+    const checkBlack = isCheck(boardState, 'black');
+
+    // We only care if the CURRENT player is in check (immediate threat)
+    const inCheckNow = isRedTurn ? checkRed : checkBlack;
+
+    if (inCheckNow) {
+        boardEl.classList.add('check-alert');
+        // Only play sound if it's the first render of this state or standard alert
+        playCheckSound();
+        messageArea.innerText = "CHECK!";
+    } else {
+        boardEl.classList.remove('check-alert');
+        messageArea.innerText = "";
+    }
+
+    if (data.lastMoveTime) {
+        if (!timerInterval && !data.winner) startCountdown();
+    } else {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+});
+
+socket.on('init', (data) => {
+    // ... Copy of init logic, but ensuring we trigger captures render
+    myRole = data.role;
+    currentRoom = data.room;
+    boardState = data.fen;
+    gameTurn = data.turn;
+    if (data.timeLeft) timeLeft = data.timeLeft;
+    if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
+    if (data.players) presentPlayers = data.players;
+    lastMove = data.lastMove || null;
+
+    if (myRole === 'black') isBlackTop = false;
+    else isBlackTop = true;
+
+    const me = document.querySelector('#bottom-player .name');
+    const op = document.querySelector('#top-player .name');
+
+    if (myRole === 'spectator') {
+        me.innerText = 'Spectator';
+        op.innerText = 'Players';
+    } else {
+        me.innerText = `You (${myRole.toUpperCase()})`;
+        op.innerText = 'Opponent';
+    }
+
+    showScreen('game');
+    renderBoard();
+    updateStatus();
+
+    // Initial renders
+    const diffs = calculateCaptures(boardState);
+    renderGraveyard(diffs);
+
+    // Initial check check
+    const isRedTurn = gameTurn === 'red';
+    const inCheckNow = isCheck(boardState, gameTurn);
+    if (inCheckNow) boardEl.classList.add('check-alert');
+    else boardEl.classList.remove('check-alert');
+
+    startCountdown();
+    history.pushState({}, '', `?room=${currentRoom}`);
+});
+
+socket.on('player_joined', (data) => {
+    messageArea.innerText = `Player ${data.role} joined!`;
+    if (data.role === 'red' || data.role === 'black') {
+        presentPlayers[data.role] = true;
+
+        // Fix: If I am waiting (it's my turn) and opponent joins, show notification NOW
+        if (isMyTurn && presentPlayers.red && presentPlayers.black) {
+            showTurnNotification();
+            if (navigator.vibrate) navigator.vibrate(200);
+        }
+    }
+    setTimeout(() => messageArea.innerText = '', 3000);
+});
+
+socket.on('player_left', (data) => {
+    messageArea.innerText = `Player ${data.role} disconnected!`;
+    if (data.role === 'red' || data.role === 'black') {
+        presentPlayers[data.role] = false;
+    }
+});
+
+socket.on('error', (msg) => {
+    alert(msg);
+});
+
+socket.on('game_over', (data) => {
+    let isVictory = false;
+    modalTitle.innerText = "GAME OVER";
+    modalInner.classList.remove('result-victory', 'result-defeat'); // Reset
+
+    if (data.winner === myRole) {
+        modalMsg.innerText = "VICTORY";
+        modalTitle.innerText = "YOU WON!";
+        modalTitle.style.color = 'var(--primary-color)';
+        modalInner.classList.add('result-victory');
+        isVictory = true;
+    } else if (myRole === 'spectator') {
+        modalMsg.innerText = `${data.winner.toUpperCase()} Won!`;
+        modalTitle.style.color = '#fff';
+    } else {
+        modalMsg.innerText = "DEFEAT";
+        modalTitle.innerText = "YOU LOST";
+        modalTitle.style.color = 'var(--accent-red)';
+        modalInner.classList.add('result-defeat');
+        isVictory = false;
+    }
+
+    modal.classList.add('visible'); // Use visible class for opacity transition
+    playFanfare(isVictory);
+
+    if (timerInterval) clearInterval(timerInterval);
+});
+
+// --- UI Listeners ---
+
+btnCreate.onclick = () => {
+    initAudio();
+    const uuid = Math.random().toString(36).substring(2, 8); // Simple ID
+    socket.emit('join_room', uuid);
+};
+
+btnJoin.onclick = () => {
+    initAudio();
+    const id = inputRoomId.value.trim();
+    if (id) socket.emit('join_room', id);
+};
+
+btnCopy.onclick = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url);
+    // Simple toast
+    const originalText = btnCopy.innerText;
+    btnCopy.innerText = "Copied!";
+    setTimeout(() => btnCopy.innerText = originalText, 2000);
+};
+
+btnLeave.onclick = () => {
+    window.location.href = '/';
+};
+
+btnRestart.onclick = () => {
+    socket.emit('restart_game', currentRoom);
+    modal.classList.remove('visible');
+};
+
+btnHome.onclick = () => {
+    window.location.href = '/';
+};
+
+// Check URL params
+const urlParams = new URLSearchParams(window.location.search);
+const roomParam = urlParams.get('room');
+if (roomParam) {
+    inputRoomId.value = roomParam;
+    // Auto join? Maybe just fill input
+    // socket.emit('join_room', roomParam); 
+}
+</file>
+
+<file path="public/style.css">
+:root {
+    /* Premium Palette */
+    --bg-color: #120c08;
+    /* Deep Ebony */
+    --primary-color: #ffd700;
+    /* Gold */
+    --accent-red: #d32f2f;
+    /* Rich Red */
+    --accent-black: #0f0f0f;
+
+    /* Board Colors */
+    --board-bg-light: #d69e5d;
+    --board-bg-dark: #8b5a2b;
+    --board-line: #422818;
+    /* Dark brown ink */
+    --board-line-highlight: rgba(255, 255, 255, 0.1);
+
+    /* UI Glass */
+    --glass-bg: rgba(20, 15, 10, 0.7);
+    --glass-border: rgba(255, 215, 0, 0.4);
+    --text-color: #f0e6d2;
+
+    --shadow-soft: 0 4px 6px rgba(0, 0, 0, 0.4);
+    --shadow-hard: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    background-image:
+        radial-gradient(circle at 50% 50%, rgba(255, 180, 0, 0.05) 0%, transparent 80%),
+        repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.03) 0px, rgba(0, 0, 0, 0.03) 2px, transparent 2px, transparent 4px);
+    color: var(--text-color);
+    overflow: hidden;
+    height: 100vh;
+}
+
+#app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+    transform: scale(0.95);
+}
+
+/* Glassmorphism Cards */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-hard);
+}
+
+.card {
+    padding: 3rem;
+    text-align: center;
+    max-width: 420px;
+    width: 90%;
+    border-top: 2px solid var(--primary-color);
+    background: linear-gradient(180deg, rgba(30, 25, 20, 0.8) 0%, rgba(30, 25, 20, 0.95) 100%);
+}
+
+.card h1 {
+    font-size: 3rem;
+    margin: 0 0 0.5rem 0;
+    color: var(--primary-color);
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+    font-family: serif;
+    letter-spacing: 2px;
+}
+
+.subtitle {
+    color: #cbb;
+    margin-bottom: 2.5rem;
+    font-weight: 300;
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.join-form {
+    display: flex;
+    gap: 0.8rem;
+}
+
+input {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--glass-border);
+    padding: 1rem;
+    border-radius: 6px;
+    color: var(--primary-color);
+    font-size: 1.1rem;
+    width: 100%;
+    transition: all 0.2s;
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: rgba(0, 0, 0, 0.6);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+}
+
+/* Buttons */
+.btn {
+    border: none;
+    padding: 1rem 1.5rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn:hover {
+    filter: brightness(1.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.2);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.primary {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #d4a000 100%);
+    color: #1a0f0a;
+    box-shadow: 0 2px 5px rgba(255, 215, 0, 0.2);
+}
+
+.secondary {
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text-color);
+}
+
+.secondary:hover {
+    background: rgba(255, 215, 0, 0.1);
+}
+
+.danger {
+    background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+    color: white;
+}
+
+.divider {
+    color: var(--glass-border);
+    font-size: 0.9rem;
+    margin: 0.5rem 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.divider::before,
+.divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--glass-border);
+    opacity: 0.5;
+}
+
+/* Game Screen Layout */
+.game-container {
+    width: 100%;
+    max-width: 600px;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Header & Status */
+.game-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    width: 100%;
+}
+
+.status-display {
+    display: flex;
+    align-items: center;
+    position: relative;
+    height: auto;
+    flex: 1;
+    justify-content: flex-start;
+}
+
+
+.player-info {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 215, 0, 0.1);
+    /* Allow expanding for graveyard */
+    flex-wrap: wrap;
+}
+
+/* Graveyard (Captured Pieces) */
+.graveyard {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+    /* Push to right */
+    background: rgba(0, 0, 0, 0.3);
+    padding: 4px;
+    border-radius: 4px;
+    min-width: 20px;
+    height: 32px;
+    align-items: center;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.piece.mini {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    transform: none;
+    /* Reset board transforms */
+    top: auto;
+    left: auto;
+    cursor: default;
+    z-index: 1;
+}
+
+.piece.mini svg {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+#bottom-player {
+    align-self: flex-start;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.5rem;
+    justify-content: flex-start;
+}
+
+#top-player {
+    flex-direction: row-reverse;
+    /* Keep avatar on right */
+    justify-content: flex-end;
+}
+
+#top-player .graveyard {
+    margin-left: 0;
+    margin-right: auto;
+    /* Push to left since reversed */
+    flex-direction: row-reverse;
+    /* Fill from right to left */
+}
+
+#top-player .details {
+    align-items: flex-end;
+    text-align: right;
+}
+
+.avatar {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #333, #111);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid var(--glass-border);
+    font-size: 1.2rem;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.name {
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #e0e0e0;
+}
+
+.timer {
+    font-family: 'Courier New', monospace;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+}
+
+.timer.low {
+    color: var(--accent-red);
+    text-shadow: 0 0 5px rgba(211, 47, 47, 0.5);
+    animation: flash 1s infinite;
+}
+
+@keyframes flash {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Turn Indicator */
+#turn-indicator {
+    padding: 0.3rem 1.5rem;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 20px;
+    font-size: 1rem;
+    border: 1px solid #555;
+    color: #aaa;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+/* WOODEN BOARD */
+.board-wrapper {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    perspective: 1200px;
+}
+
+.xiangqi-board {
+    position: relative;
+    width: 100%;
+    max-width: min(480px, 58vh);
+    aspect-ratio: 9 / 10;
+    height: auto;
+    margin: 0 auto;
+
+    /* RICH WOOD TEXTURE */
+    background-color: var(--board-bg-light);
+    background-image:
+        /* Grain */
+        repeating-linear-gradient(90deg,
+            transparent 0,
+            transparent 1px,
+            rgba(60, 30, 10, 0.05) 1px,
+            rgba(60, 30, 10, 0.05) 3px),
+        /* Flow */
+        radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1) 0%, rgba(0, 0, 0, 0.1) 100%),
+        /* Noise */
+        url("data:image/svg+xml,%3Svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' fill='transparent'/%3E%3Crect width='200' height='200' fill='%23642' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+
+    background-blend-mode: multiply, overlay, normal;
+
+    border-radius: 4px;
+    /* 3D Box Effect */
+    box-shadow:
+        /* Inner lighting */
+        inset 0 0 30px rgba(0, 0, 0, 0.6),
+        /* Surface Bevel highlight */
+        inset 1px 1px 2px rgba(255, 255, 255, 0.3),
+        /* Surface Bevel shadow */
+        inset -1px -1px 2px rgba(0, 0, 0, 0.5),
+        /* Side of board (depth) */
+        0 5px 0 #5d4037,
+        0 6px 0 #4a3028,
+        0 7px 0 #3e2620,
+        0 8px 0 #2d1b15,
+        /* Deep Drop Shadow */
+        0 20px 40px rgba(0, 0, 0, 0.6);
+
+    user-select: none;
+    transition: transform 0.5s;
+    border: 1px solid #5d4037;
+}
+
+/* Grid Lines - Ink Effect */
+.xiangqi-board::before {
+    content: "";
+    position: absolute;
+    top: 4.5%;
+    left: calc(100% / 18);
+    width: calc(100% * 8 / 9);
+    height: 41%;
+    box-sizing: border-box;
+    border: 2px solid var(--board-line);
+    border-bottom: 0;
+
+    background-image:
+        linear-gradient(90deg, var(--board-line) 2px, transparent 2px),
+        linear-gradient(var(--board-line) 2px, transparent 2px);
+    background-size: calc(100% / 8) calc(100% / 4);
+    background-position: -1px -1px;
+    mix-blend-mode: multiply;
+    opacity: 0.9;
+}
+
+.xiangqi-board::after {
+    content: "";
+    position: absolute;
+    bottom: 4.5%;
+    left: calc(100% / 18);
+    width: calc(100% * 8 / 9);
+    height: 41%;
+    box-sizing: border-box;
+    border: 2px solid var(--board-line);
+    border-top: 0;
+
+    background-image:
+        linear-gradient(90deg, var(--board-line) 2px, transparent 2px),
+        linear-gradient(var(--board-line) 2px, transparent 2px);
+    background-size: calc(100% / 8) calc(100% / 4);
+    background-position: -1px 1px;
+    mix-blend-mode: multiply;
+    opacity: 0.9;
+}
+
+/* Palace Diagonals */
+.palace-top,
+.palace-bottom {
+    position: absolute;
+    left: calc(100% * 3 / 9 + 100% / 18);
+    width: calc(100% * 2 / 9);
+    height: 20%;
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: multiply;
+    opacity: 0.9;
+}
+
+.palace-top {
+    top: 4.5%;
+    background:
+        linear-gradient(to bottom right, transparent calc(50% - 1.5px), var(--board-line) calc(50% - 1.5px), var(--board-line) calc(50% + 1.5px), transparent calc(50% + 1.5px)),
+        linear-gradient(to bottom left, transparent calc(50% - 1.5px), var(--board-line) calc(50% - 1.5px), var(--board-line) calc(50% + 1.5px), transparent calc(50% + 1.5px));
+}
+
+.palace-bottom {
+    bottom: 4.5%;
+    background:
+        linear-gradient(to bottom right, transparent calc(50% - 1.5px), var(--board-line) calc(50% - 1.5px), var(--board-line) calc(50% + 1.5px), transparent calc(50% + 1.5px)),
+        linear-gradient(to bottom left, transparent calc(50% - 1.5px), var(--board-line) calc(50% - 1.5px), var(--board-line) calc(50% + 1.5px), transparent calc(50% + 1.5px));
+}
+
+/* River Text */
+.river {
+    position: absolute;
+    top: 45.5%;
+    left: 5%;
+    width: 90%;
+    height: 9%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 16%;
+    box-sizing: border-box;
+    align-items: center;
+    color: var(--board-line);
+    opacity: 0.85;
+    font-family: "KaiTi", "SimKai", "STKaiti", serif;
+    font-size: 1.8rem;
+    pointer-events: none;
+    letter-spacing: 0.5rem;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.4);
+    mix-blend-mode: multiply;
+}
+
+/* Pieces */
+.piece {
+    position: absolute;
+    width: 11.11%;
+    height: 10%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: grab;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), top 0.3s ease-out, left 0.3s ease-out;
+    z-index: 10;
+    will-change: top, left, transform;
+}
+
+.piece:active {
+    cursor: grabbing;
+    transform: scale(1.1);
+    z-index: 100;
+}
+
+.piece svg {
+    width: 96%;
+    height: 96%;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+    transition: filter 0.2s;
+}
+
+/* Idle Sheen for Pieces - Subtle "glint" */
+@keyframes sheen {
+    0% {
+        filter: brightness(1);
+    }
+
+    50% {
+        filter: brightness(1.15);
+    }
+
+    100% {
+        filter: brightness(1);
+    }
+}
+
+.piece:hover svg {
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.6)) brightness(1.1);
+}
+
+/* Selection & Move Indicators */
+.piece.selected {
+    z-index: 20;
+    transform: translateY(-8%) scale(1.1);
+}
+
+.piece.selected::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 120%;
+    height: 120%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    border: 3px solid var(--primary-color);
+    box-shadow: 0 0 15px var(--primary-color), inset 0 0 10px var(--primary-color);
+    opacity: 0.8;
+    animation: selectPulse 1.5s infinite;
+    pointer-events: none;
+}
+
+@keyframes selectPulse {
+    0% {
+        transform: translate(-50%, -50%) scale(0.95);
+        opacity: 0.6;
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.05);
+        opacity: 1;
+        box-shadow: 0 0 20px var(--primary-color);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(0.95);
+        opacity: 0.6;
+    }
+}
+
+/* Previous Move Highlight */
+.last-move-src,
+.last-move-dest {
+    position: absolute;
+    width: 11.11%;
+    height: 10%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.last-move-src::after {
+    content: "";
+    width: 80%;
+    height: 80%;
+    border: 2px dashed rgba(255, 215, 0, 0.4);
+    border-radius: 50%;
+    background: rgba(255, 215, 0, 0.1);
+}
+
+.last-move-dest::after {
+    content: "";
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, transparent 70%);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.1);
+    border-radius: 50%;
+    animation: pulseGlow 2s infinite;
+}
+
+@keyframes pulseGlow {
+
+    0%,
+    100% {
+        opacity: 0.5;
+        transform: scale(0.9);
+    }
+
+    50% {
+        opacity: 0.8;
+        transform: scale(1.1);
+    }
+}
+
+/* Empty Move Indicator - Target Reticle Style */
+.move-indicator {
+    position: absolute;
+    width: 11.11%;
+    height: 10%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    z-index: 30;
+}
+
+.dot {
+    /* Reticle */
+    width: 30%;
+    height: 30%;
+    border: 2px solid rgba(0, 255, 0, 0.5);
+    border-radius: 50%;
+    background: rgba(0, 255, 0, 0.1);
+    box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+    transition: all 0.2s;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.dot::before,
+.dot::after {
+    content: "";
+    position: absolute;
+    background: rgba(0, 255, 0, 0.6);
+}
+
+/* Crosshairs */
+.dot::before {
+    top: 50%;
+    left: -20%;
+    width: 140%;
+    height: 2px;
+    transform: translateY(-50%);
+}
+
+.dot::after {
+    left: 50%;
+    top: -20%;
+    height: 140%;
+    width: 2px;
+    transform: translateX(-50%);
+}
+
+.move-indicator:hover .dot {
+    transform: scale(1.2);
+    border-color: #0f0;
+    box-shadow: 0 0 10px #0f0;
+    background: rgba(0, 255, 0, 0.2);
+}
+
+/* Capture Target - Red Kill Zone */
+.target {
+    width: 110%;
+    height: 110%;
+    border: 3px solid rgba(255, 0, 0, 0.6);
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.4), inset 0 0 10px rgba(255, 0, 0, 0.2);
+    animation: dangerPulse 1s infinite;
+}
+
+.move-indicator:hover .target {
+    background: rgba(255, 0, 0, 0.15);
+    border-color: #f00;
+    cursor: pointer;
+}
+
+@keyframes dangerPulse {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 1;
+        box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+    }
+
+    100% {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+}
+
+/* Capture Effect (JS trigger) */
+.capture-flash {
+    animation: captureShake 0.4s cubic-bezier(.36, .07, .19, .97) both;
+}
+
+@keyframes captureShake {
+
+    10%,
+    90% {
+        transform: translate3d(-1px, 0, 0);
+    }
+
+    20%,
+    80% {
+        transform: translate3d(2px, 0, 0);
+    }
+
+    30%,
+    50%,
+    70% {
+        transform: translate3d(-4px, 0, 0);
+    }
+
+    40%,
+    60% {
+        transform: translate3d(4px, 0, 0);
+    }
+}
+
+/* Check Alert on Board */
+.check-alert {
+    box-shadow: 0 0 0 4px #ff0000 inset !important;
+    animation: checkPulse 1s infinite;
+}
+
+@keyframes checkPulse {
+    0% {
+        box-shadow: 0 0 0 4px rgba(255, 0, 0, 0.5) inset;
+    }
+
+    50% {
+        box-shadow: 0 0 0 10px rgba(255, 0, 0, 0.8) inset;
+    }
+
+    100% {
+        box-shadow: 0 0 0 4px rgba(255, 0, 0, 0.5) inset;
+    }
+}
+
+/* In-game Controls */
+.game-controls {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.btn.small {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* Messages */
+.message {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid var(--primary-color);
+}
+
+/* Turn Notification Overlay - Toast Style */
+#turn-notification {
+    position: absolute;
+    top: 15%;
+    /* Higher up */
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    background: linear-gradient(135deg, rgba(20, 15, 10, 0.95) 0%, rgba(40, 30, 20, 0.95) 100%);
+    border: 1px solid var(--primary-color);
+    border-radius: 50px;
+    /* Pill shape */
+    padding: 0.8rem 2.5rem;
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    /* Smaller */
+    font-family: serif;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    letter-spacing: 0.1rem;
+    white-space: nowrap;
+}
+
+#turn-notification.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    top: 18%;
+    /* Slide down slightly */
+}
+
+/* MODAL - Corner Notification Style */
+#modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    /* No overlay */
+    display: flex;
+    justify-content: flex-end;
+    /* Align right */
+    align-items: flex-end;
+    /* Align bottom */
+    padding: 2rem;
+    box-sizing: border-box;
+    z-index: 1000;
+    pointer-events: none;
+    /* Let clicks pass through */
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+#modal-overlay.visible {
+    opacity: 1;
+    /* pointer-events remains none for the container */
+}
+
+/* Override previous minimized styles if any remains or just simplify */
+#modal-overlay.minimized {
+    /* Deprecated but kept for safety in transition, acts same as default now */
+    background: transparent;
+}
+
+.modal {
+    transform: scale(0.9) translateY(20px);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    /* Tighter gap */
+    align-items: center;
+
+    /* Corner Card Style - Micro */
+    width: auto;
+    max-width: 160px;
+    /* Micro width */
+    padding: 0.5rem;
+    /* Minimal padding */
+    pointer-events: none;
+    margin: 0;
+    border-radius: 6px;
+    background: rgba(20, 15, 10, 0.95);
+    /* Ensure readability */
+}
+
+.actions-row {
+    display: flex;
+    gap: 0.3rem;
+    justify-content: center;
+    width: 100%;
+}
+
+#modal-overlay.visible .modal {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+    /* Enable clicks only when visible */
+}
+
+.result-victory {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+    /* Subtle shadow */
+    border-width: 1px;
+    /* Thinner border */
+}
+
+.result-defeat {
+    border-color: var(--accent-red);
+    box-shadow: 0 0 15px rgba(200, 0, 0, 0.2);
+    border-width: 1px;
+}
+
+#modal-title {
+    font-size: 1rem;
+    /* Tiny title */
+    text-transform: uppercase;
+    letter-spacing: 0.05rem;
+    text-shadow: none;
+    margin: 0;
+    font-weight: bold;
+}
+
+/* Hide message completely in micro mode to save space, or make it very small */
+#modal-message {
+    display: none;
+}
+
+/* Make buttons tiny */
+.modal .btn {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+    border-radius: 4px;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .game-container {
+        padding: 0.5rem;
+        height: 100dvh;
+        justify-content: flex-start;
+    }
+
+    .game-header {
+        margin-bottom: 0.5rem;
+        gap: 0.25rem;
+        flex-shrink: 0;
+        width: 100%;
+    }
+
+    .player-info {
+        padding: 0.2rem 0.3rem;
+        gap: 0.3rem;
+    }
+
+    #turn-indicator {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.75rem;
+    }
+
+    .avatar {
+        width: 24px;
+        height: 24px;
+        font-size: 0.8rem;
+    }
+
+    .name {
+        font-size: 0.75rem;
+    }
+
+    .timer {
+        font-size: 0.9rem;
+    }
+
+    .board-wrapper {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        width: 100%;
+        perspective: none;
+        /* Disable perspective on mobile for perf/layout stability */
+    }
+
+    .xiangqi-board {
+        width: min(96vw, 45dvh);
+        height: auto;
+        aspect-ratio: 9 / 10;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    }
+
+    .game-controls {
+        flex-shrink: 0;
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .btn.small {
+        padding: 0.8rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .subtitle {
+        font-size: 0.9rem;
+    }
+
+    .card h1 {
+        font-size: 2rem;
+    }
+}
+</file>
+
+</files>

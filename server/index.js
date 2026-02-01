@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const XiangqiGame = require('./game');
+const AI = require('./ai');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,7 +23,16 @@ const rooms = {};
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('join_room', (roomId) => {
+    socket.on('join_room', (data) => {
+        // Support both string (old) and object (new)
+        let roomId, options = {};
+        if (typeof data === 'string') {
+            roomId = data;
+        } else {
+            roomId = data.roomId;
+            options = data.options || {};
+        }
+
         let room = rooms[roomId];
 
         // Create room if not exists
@@ -34,8 +44,17 @@ io.on('connection', (socket) => {
                     red: null,
                     black: null
                 },
-                spectators: []
+                spectators: [],
+                mode: options.mode || 'pvp', // 'pvp' or 'ai'
+                difficulty: options.difficulty || 'normal',
+                ai: null
             };
+
+            if (room.mode === 'ai') {
+                room.ai = new AI(room.difficulty);
+                room.players.black = 'AI'; // Reserve black for AI
+            }
+
             rooms[roomId] = room;
         }
 
@@ -152,9 +171,62 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('game_over', { winner: room.game.winner });
             }
         } else {
-            socket.emit('invalid_move'); // Client should mostly prevent this, but just in case
+            socket.emit('invalid_move');
+        }
+
+        // --- AI TURN HANDLING ---
+        if (success && room.mode === 'ai' && !room.game.winner && room.game.turn === 'black') {
+            // Slight delay for realism
+            setTimeout(() => {
+                handleAIMove(roomId);
+            }, 500);
         }
     });
+
+    const handleAIMove = (roomId) => {
+        const room = rooms[roomId];
+        if (!room || !room.ai) return;
+
+        // Check if game over already (e.g. player mated AI in previous turn logic?)
+        // The previous block handles game_over check, but let's be safe.
+        if (room.game.winner) return;
+
+        // Timer Check for AI?
+        // We can just update it.
+        room.game.updateTimer();
+
+        // Calculate Move
+        const move = room.ai.getBestMove(room.game, 'black');
+
+        if (move) {
+            room.game.makeMove(move.from.x, move.from.y, move.to.x, move.to.y);
+            room.game.startTimer(); // Restart timer for human
+
+            io.to(roomId).emit('update', {
+                board: room.game.board,
+                turn: room.game.turn,
+                lastMove: move,
+                history: room.game.history,
+                timeLeft: room.game.timeLeft,
+                lastMoveTime: room.game.lastMoveTime,
+                players: {
+                    red: !!room.players.red,
+                    black: true // AI is always present
+                }
+            });
+
+            if (room.game.winner) {
+                io.to(roomId).emit('game_over', { winner: room.game.winner });
+            }
+        } else {
+            // No move found? Should be stalemate/mate, which game.js handles?
+            // If getBestMove returns null, it means no moves. 
+            // game.makeMove checks for winner at end of turn.
+            // If AI cannot move, it is lost.
+            room.game.winner = 'red';
+            io.to(roomId).emit('game_over', { winner: 'red' });
+        }
+    };
 
     socket.on('restart_game', (roomId) => {
         const room = rooms[roomId];

@@ -342,6 +342,14 @@ const modalInner = document.querySelector('.modal'); // Need to target inner for
 const btnRestart = document.getElementById('btn-restart');
 const btnHome = document.getElementById('btn-home');
 
+// AI Elements
+const btnAIMenu = document.getElementById('btn-ai-menu');
+const aiModal = document.getElementById('ai-modal');
+const btnStartAI = document.getElementById('btn-start-ai');
+const btnCancelAI = document.getElementById('btn-cancel-ai');
+const diffButtons = document.querySelectorAll('.btn-diff');
+let selectedDifficulty = 'normal';
+
 
 // --- Helpers ---
 function showScreen(name) {
@@ -836,8 +844,44 @@ socket.on('game_over', (data) => {
 btnCreate.onclick = () => {
     initAudio();
     const uuid = Math.random().toString(36).substring(2, 8); // Simple ID
-    socket.emit('join_room', uuid);
+    socket.emit('join_room', { roomId: uuid, options: { mode: 'pvp' } }); // Explicit mode
 };
+
+// AI Menu Listeners
+if (btnAIMenu) {
+    btnAIMenu.onclick = () => {
+        aiModal.classList.remove('hidden');
+    };
+}
+
+if (btnCancelAI) {
+    btnCancelAI.onclick = () => {
+        aiModal.classList.add('hidden');
+    };
+}
+
+diffButtons.forEach(btn => {
+    btn.onclick = () => {
+        diffButtons.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedDifficulty = btn.getAttribute('data-diff');
+    };
+});
+
+if (btnStartAI) {
+    btnStartAI.onclick = () => {
+        initAudio();
+        const uuid = Math.random().toString(36).substring(2, 8);
+        socket.emit('join_room', {
+            roomId: uuid,
+            options: {
+                mode: 'ai',
+                difficulty: selectedDifficulty
+            }
+        });
+        aiModal.classList.add('hidden');
+    };
+}
 
 btnJoin.onclick = () => {
     initAudio();

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Online Xiangqi | Real-time Chinese Chess</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style_ai.css">
 </head>
 
 <body>
@@ -53,7 +54,8 @@
                 <p class="subtitle">Real-time Chinese Chess</p>
 
                 <div class="actions">
-                    <button id="btn-create" class="btn primary">Create Match</button>
+                    <button id="btn-create" class="btn primary">Play vs Friend</button>
+                    <button id="btn-ai-menu" class="btn secondary">Play vs Computer</button>
                     <div class="divider">OR</div>
                     <div class="join-form">
                         <input type="text" id="input-room-id" placeholder="Enter Room ID">
@@ -104,6 +106,26 @@
                     <button id="btn-copy-link" class="btn small">Copy Invite Link</button>
                     <button id="btn-leave" class="btn small danger">Leave Game</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for AI Setup -->
+    <div id="ai-modal" class="hidden">
+        <div class="ai-dialog glass">
+            <h2>Setup AI Match</h2>
+            <div class="difficulty-select">
+                <label>Difficulty:</label>
+                <div class="diff-options">
+                    <button class="btn-diff selected" data-diff="easy">Easy</button>
+                    <button class="btn-diff" data-diff="normal">Normal</button>
+                    <button class="btn-diff" data-diff="hard">Hard</button>
+                    <button class="btn-diff" data-diff="extreme">Extreme</button>
+                </div>
+            </div>
+            <div class="actions-row">
+                <button id="btn-start-ai" class="btn primary">Start Game</button>
+                <button id="btn-cancel-ai" class="btn secondary">Cancel</button>
             </div>
         </div>
     </div>
