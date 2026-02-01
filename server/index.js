@@ -62,7 +62,11 @@ io.on('connection', (socket) => {
             history: room.game.history,
             isBlackTop: true, // Standard view
             timeLeft: room.game.timeLeft,
-            lastMoveTime: room.game.lastMoveTime
+            lastMoveTime: room.game.lastMoveTime,
+            players: {
+                red: !!room.players.red,
+                black: !!room.players.black
+            }
         });
 
         // Notify others
@@ -76,7 +80,11 @@ io.on('connection', (socket) => {
                 turn: room.game.turn,
                 history: room.game.history,
                 timeLeft: room.game.timeLeft,
-                lastMoveTime: room.game.lastMoveTime
+                lastMoveTime: room.game.lastMoveTime,
+                players: {
+                    red: !!room.players.red,
+                    black: !!room.players.black
+                }
             });
         }
 
@@ -133,7 +141,11 @@ io.on('connection', (socket) => {
                 lastMove: { from, to },
                 history: room.game.history,
                 timeLeft: room.game.timeLeft,
-                lastMoveTime: room.game.lastMoveTime
+                lastMoveTime: room.game.lastMoveTime,
+                players: {
+                    red: !!room.players.red,
+                    black: !!room.players.black
+                }
             });
 
             if (room.game.winner) {
@@ -164,7 +176,11 @@ io.on('connection', (socket) => {
             history: [],
             restart: true,
             timeLeft: room.game.timeLeft,
-            lastMoveTime: room.game.lastMoveTime
+            lastMoveTime: room.game.lastMoveTime,
+            players: {
+                red: !!room.players.red,
+                black: !!room.players.black
+            }
         });
     });
 });

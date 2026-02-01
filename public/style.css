@@ -798,18 +798,43 @@ input:focus {
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.8);
     border: 1px solid var(--primary-color);
-    color: var(--primary-color);
-    padding: 0.5rem 1.5rem;
-    border-radius: 20px;
-    white-space: nowrap;
-    margin-top: 1rem;
-    font-weight: bold;
-    pointer-events: none;
-    z-index: 50;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    transition: opacity 0.3s, margin-top 0.3s;
 }
+
+/* Turn Notification Overlay - Mahogany & Gold */
+#turn-notification {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.5);
+    background: radial-gradient(circle, rgba(20, 15, 10, 0.95) 0%, rgba(10, 5, 0, 0.8) 100%);
+    border: 2px solid var(--primary-color);
+    border-radius: 12px;
+    padding: 1.5rem 3rem;
+    color: var(--primary-color);
+    font-size: 2.5rem;
+    font-family: serif;
+    font-weight: bold;
+    text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(255, 215, 0, 0.2);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1000;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    letter-spacing: 0.2rem;
+    white-space: nowrap;
+}
+
+#turn-notification.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 50px rgba(255, 215, 0, 0.3), inset 0 0 30px rgba(255, 215, 0, 0.1);
+}
+
+border: 1px solid rgba(255, 215, 0, 0.3);
+border-radius: 8px;
+pointer-events: none;
+}
+
 
 .message:not(:empty) {
     opacity: 1;

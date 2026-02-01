@@ -9,9 +9,19 @@ let lastMove = null; // {from: {x,y}, to: {x,y}}
 let isMyTurn = false;
 let gameTurn = 'red';
 let isBlackTop = true; // If I am red (or spec), Black is top. If I am black, Red is top (flipped).
-let timeLeft = { red: 600000, black: 600000 };
+let timeLeft = { red: 3600000, black: 3600000 }; // 60 mins
 let lastMoveTime = null;
 let timerInterval = null;
+let presentPlayers = { red: false, black: false };
+
+// Turn Notification Overlay
+function showTurnNotification() {
+    const el = document.getElementById('turn-notification');
+    if (el) {
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 2000);
+    }
+}
 
 // Audio Context for synthesized sounds
 let audioCtx = null;
@@ -151,11 +161,15 @@ function playSound(isCapture) {
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
-    // Wood Checkers / Chess Sound synthesis
     const t = audioCtx.currentTime;
 
-    // Impact noise (short burst)
-    const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+    // Master Gain for this sound event
+    const master = audioCtx.createGain();
+    master.connect(audioCtx.destination);
+    master.gain.setValueAtTime(1.0, t); // Boost volume
+
+    // 1. Impact Noise (Wood Texture)
+    const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseBuffer.length; i++) {
         output[i] = Math.random() * 2 - 1;
@@ -163,51 +177,70 @@ function playSound(isCapture) {
     const noise = audioCtx.createBufferSource();
     noise.buffer = noiseBuffer;
     const noiseFilter = audioCtx.createBiquadFilter();
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.value = 1000;
     const noiseGain = audioCtx.createGain();
 
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(audioCtx.destination);
+    noiseGain.connect(master); // Connect to master
 
-    // Tonal body (wood resonance)
+    // 2. Tonal Body (Resonance)
     const osc = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    osc.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
+    const oscGain = audioCtx.createGain();
+    osc.connect(oscGain);
+    oscGain.connect(master);
+
+    // 3. Sub-bass (for heaviness)
+    const subOsc = audioCtx.createOscillator();
+    const subGain = audioCtx.createGain();
+    subOsc.connect(subGain);
+    subGain.connect(master);
 
     if (isCapture) {
-        // "Heavy Thud" 
-        // Noise
+        // --- HEAVY THUD (Capture) ---
+        // Noise: Low thud
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(800, t);
+        noiseFilter.frequency.exponentialRampToValueAtTime(100, t + 0.1);
+        noiseGain.gain.setValueAtTime(1.0, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+        noise.start(t);
+
+        // Body: Deep resonance
+        osc.frequency.setValueAtTime(120, t);
+        osc.frequency.exponentialRampToValueAtTime(60, t + 0.2);
+        oscGain.gain.setValueAtTime(0.8, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        osc.start(t);
+        osc.stop(t + 0.4);
+
+        // Sub: Rumble
+        subOsc.type = 'sine';
+        subOsc.frequency.setValueAtTime(50, t);
+        subOsc.frequency.linearRampToValueAtTime(30, t + 0.3);
+        subGain.gain.setValueAtTime(0.8, t);
+        subGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        subOsc.start(t);
+        subOsc.stop(t + 0.4);
+
+    } else {
+        // --- CRISP CLACK (Move) ---
+        // Noise: Sharp snap
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.setValueAtTime(1000, t);
         noiseGain.gain.setValueAtTime(0.8, t);
         noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
         noise.start(t);
 
-        // Tone
-        osc.frequency.setValueAtTime(150, t);
-        osc.frequency.exponentialRampToValueAtTime(80, t + 0.1);
-        gainNode.gain.setValueAtTime(0.8, t);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
-
+        // Body: Wood knock
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, t);
+        osc.frequency.exponentialRampToValueAtTime(500, t + 0.05); // Pitch shift up for "hard" surface
+        oscGain.gain.setValueAtTime(0.6, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
         osc.start(t);
-        osc.stop(t + 0.2);
-    } else {
-        // "Quick Clack"
-        // Noise (more treble)
-        noiseFilter.frequency.value = 2000;
-        noiseGain.gain.setValueAtTime(0.6, t);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.03);
-        noise.start(t);
+        osc.stop(t + 0.15);
 
-        // Tone
-        osc.frequency.setValueAtTime(400, t);
-        osc.frequency.exponentialRampToValueAtTime(300, t + 0.05);
-        gainNode.gain.setValueAtTime(0.5, t);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
-
-        osc.start(t);
-        osc.stop(t + 0.1);
+        // No sub for regular moves
     }
 }
 
@@ -219,10 +252,10 @@ function playFanfare(isVictory) {
     const t = audioCtx.currentTime;
     const masterGain = audioCtx.createGain();
     masterGain.connect(audioCtx.destination);
-    masterGain.gain.setValueAtTime(0.5, t); // Volume control
+    masterGain.gain.setValueAtTime(0.8, t); // Louder
 
     // Helper for note
-    const playNote = (freq, time, dur, type = 'triangle') => {
+    const playNote = (freq, time, dur, type = 'triangle', vol = 1.0) => {
         const osc = audioCtx.createOscillator();
         const gn = audioCtx.createGain();
         osc.frequency.value = freq;
@@ -230,24 +263,60 @@ function playFanfare(isVictory) {
         osc.connect(gn);
         gn.connect(masterGain);
         gn.gain.setValueAtTime(0, time);
-        gn.gain.linearRampToValueAtTime(1, time + 0.05);
+        gn.gain.linearRampToValueAtTime(vol, time + 0.05);
         gn.gain.exponentialRampToValueAtTime(0.01, time + dur);
         osc.start(time);
         osc.stop(time + dur);
     };
 
     if (isVictory) {
-        // Major Arpeggio (C Major: C4, E4, G4, C5)
-        playNote(261.63, t, 0.5); // C4
-        playNote(329.63, t + 0.15, 0.5); // E4
-        playNote(392.00, t + 0.3, 0.5); // G4
-        playNote(523.25, t + 0.45, 1.5, 'sine'); // C5
+        // Epic Victory Fanfare (Gong + Chord)
+        // Gong-ish low sine
+        playNote(130.81, t, 3.0, 'sine', 1.0); // C3
+
+        // Chord C Major
+        playNote(261.63, t, 2.0, 'triangle', 0.8); // C4
+        playNote(329.63, t + 0.1, 2.0, 'triangle', 0.8); // E4
+        playNote(392.00, t + 0.2, 2.0, 'triangle', 0.8); // G4
+        playNote(523.25, t + 0.3, 2.5, 'triangle', 1.0); // C5 Highlight
+
     } else {
-        // Sad Minor Descend
-        playNote(392.00, t, 0.4); // G4
-        playNote(311.13, t + 0.4, 0.4); // Eb4
-        playNote(261.63, t + 0.8, 1.5, 'sawtooth'); // C4
+        // Defeat: Dismal Chord
+        playNote(196.00, t, 2.0, 'sawtooth', 0.6); // G3
+        playNote(155.56, t + 0.3, 2.0, 'sawtooth', 0.6); // Eb3
+        playNote(130.81, t + 0.6, 3.0, 'sawtooth', 0.8); // C3
     }
+}
+
+function playCheckSound() {
+    if (!audioCtx) initAudio();
+    if (!audioCtx || audioCtx.state !== 'running') return;
+
+    const t = audioCtx.currentTime;
+    const msgGain = audioCtx.createGain();
+    msgGain.connect(audioCtx.destination);
+    msgGain.gain.setValueAtTime(1.0, t);
+
+    // Urgent Warning Bell
+    const playBell = (time) => {
+        const osc = audioCtx.createOscillator();
+        const gn = audioCtx.createGain();
+        osc.type = 'square'; // Harsh
+        osc.frequency.setValueAtTime(880, time); // High A5
+        osc.frequency.exponentialRampToValueAtTime(440, time + 0.2); // Drop
+
+        gn.gain.setValueAtTime(0.5, time);
+        gn.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+
+        osc.connect(gn);
+        gn.connect(msgGain);
+        osc.start(time);
+        osc.stop(time + 0.3);
+    };
+
+    playBell(t);
+    playBell(t + 0.15);
+    playBell(t + 0.3);
 }
 
 
@@ -419,7 +488,17 @@ function updateStatus() {
     turnIndicator.style.borderColor = isRedTurn ? '#e63946' : '#111';
     turnIndicator.style.color = isRedTurn ? '#e63946' : '#aaa';
 
+    const wasMyTurn = isMyTurn;
     isMyTurn = (myRole === gameTurn);
+
+    if (!wasMyTurn && isMyTurn) {
+        // Only show notification if both players are present
+        if (presentPlayers.red && presentPlayers.black) {
+            showTurnNotification();
+        }
+        // Optional Haptic feedback
+        if (navigator.vibrate) navigator.vibrate(200);
+    }
 }
 
 function formatTime(ms) {
@@ -595,31 +674,7 @@ function isCheck(board, defenderColor) {
 
 // --- SOUNDS UPDATED ---
 
-function playCheckSound() {
-    if (!audioCtx) initAudio();
-    if (!audioCtx || audioCtx.state !== 'running') return;
-
-    const t = audioCtx.currentTime;
-    // Urgent double beep
-    const playBeep = (time) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(800, time);
-        osc.frequency.exponentialRampToValueAtTime(600, time + 0.15);
-
-        gain.gain.setValueAtTime(0.3, time);
-        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
-
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(time);
-        osc.stop(time + 0.2);
-    };
-
-    playBeep(t);
-    playBeep(t + 0.18);
-}
+// Old playCheckSound removed, simplified into main audio block above
 
 
 // --- UPDATE HANDLER ---
@@ -688,6 +743,7 @@ socket.on('init', (data) => {
     gameTurn = data.turn;
     if (data.timeLeft) timeLeft = data.timeLeft;
     if (data.lastMoveTime) lastMoveTime = data.lastMoveTime;
+    if (data.players) presentPlayers = data.players;
     lastMove = data.lastMove || null;
 
     if (myRole === 'black') isBlackTop = false;
@@ -724,11 +780,23 @@ socket.on('init', (data) => {
 
 socket.on('player_joined', (data) => {
     messageArea.innerText = `Player ${data.role} joined!`;
+    if (data.role === 'red' || data.role === 'black') {
+        presentPlayers[data.role] = true;
+
+        // Fix: If I am waiting (it's my turn) and opponent joins, show notification NOW
+        if (isMyTurn && presentPlayers.red && presentPlayers.black) {
+            showTurnNotification();
+            if (navigator.vibrate) navigator.vibrate(200);
+        }
+    }
     setTimeout(() => messageArea.innerText = '', 3000);
 });
 
 socket.on('player_left', (data) => {
     messageArea.innerText = `Player ${data.role} disconnected!`;
+    if (data.role === 'red' || data.role === 'black') {
+        presentPlayers[data.role] = false;
+    }
 });
 
 socket.on('error', (msg) => {

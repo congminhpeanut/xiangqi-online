@@ -18,8 +18,8 @@ class XiangqiGame {
         this.winner = null;
         this.history = [];
 
-        // Timer settings (10 minutes in ms)
-        this.timeLimit = 10 * 60 * 1000;
+        // Timer settings (60 minutes in ms)
+        this.timeLimit = 60 * 60 * 1000;
         this.timeLeft = {
             red: this.timeLimit,
             black: this.timeLimit
