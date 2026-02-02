@@ -166,8 +166,9 @@ class AI {
 
             if (this.difficulty === 'easy') { maxDepth = 2; randomness = 30; }
             if (this.difficulty === 'normal') { maxDepth = 4; randomness = 10; }
-            if (this.difficulty === 'hard') { maxDepth = 6; randomness = 0; }
-            if (this.difficulty === 'extreme') { maxDepth = 8; randomness = 0; }
+            if (this.difficulty === 'hard') { maxDepth = 8; randomness = 0; }
+            // Extreme: try to go deep.
+            if (this.difficulty === 'extreme') { maxDepth = 24; randomness = 0; }
 
             console.log(`[AI] Start Search. Level: ${this.difficulty}, Time: ${this.searchTime}ms, MaxDepth: ${maxDepth}`);
 
@@ -183,13 +184,13 @@ class AI {
                     beta = finalScore + 500;
                 }
 
-                let score = this.alphaBeta(game, depth, alpha, beta, maximize, hash, 0);
+                let score = this.alphaBeta(game, depth, alpha, beta, maximize, hash, 0, true);
 
                 // If fell out of window, re-search with full window
                 if (alpha !== -Infinity && beta !== Infinity) {
                     if (score <= alpha || score >= beta) {
                         console.log(`[AI] Aspiration Fail at depth ${depth} (Score: ${score}), re-searching full width.`);
-                        score = this.alphaBeta(game, depth, -Infinity, Infinity, maximize, hash, 0);
+                        score = this.alphaBeta(game, depth, -Infinity, Infinity, maximize, hash, 0, true);
                     }
                 }
 
@@ -215,7 +216,6 @@ class AI {
                 if (moves.length > 0) bestMove = moves[Math.floor(Math.random() * moves.length)];
             } else if (randomness > 0) {
                 // Weighted randomness: sometimes pick the 2nd best or just blunder?
-                // For now, simple blunder check
                 if (Math.random() * 100 < randomness) {
                     console.log(`[AI] Making a "mistake" due to difficulty ${this.difficulty}`);
                     const moves = this.generateMoves(game, color);
@@ -238,7 +238,7 @@ class AI {
         }
     }
 
-    alphaBeta(game, depth, alpha, beta, maximizingPlayer, hash, ply) {
+    alphaBeta(game, depth, alpha, beta, maximizingPlayer, hash, ply, canNull) {
         if (this.nodeCount++ % 2048 === 0) {
             if (Date.now() - this.startTime > this.searchTime) this.timeout = true;
         }
@@ -257,14 +257,32 @@ class AI {
         }
         if (ttEntry && ttEntry.hash === hash) ttMove = ttEntry.move;
 
-        // Leaf / Quiescence (Call QS instead of Eval)
+        // Leaf / Quiescence
         if (depth <= 0) {
             return this.quiescence(game, alpha, beta, maximizingPlayer);
         }
 
         const color = maximizingPlayer ? 'red' : 'black';
-        let moves = this.generateMoves(game, color);
 
+        // --- NULL MOVE PRUNING ---
+        // Conditions: Not in check, depth >= 3, not root (ply>0)
+        // We assume valid "not in check" if strict logic holds.
+        // For simplicity: skip if ply is small or endgame.
+        if (canNull && ply > 0 && depth >= 3 && !this.isKingInCheck(game, color)) {
+            // Make Null Move (Swap turn)
+            // In Xiangqi, passing is illegal. But we simulate it for pruning.
+            // We pass current color's turn without changing board.
+            // Search with reduced depth.
+            // R = 2
+            const R = 2;
+            const nullHash = hash ^ ZOBRIST.turn;
+            // Note: flip maximizingPlayer because turn skipped
+            const score = -this.alphaBeta(game, depth - 1 - R, -beta, -beta + 1, !maximizingPlayer, nullHash, ply + 1, false);
+            if (score >= beta) return beta;
+        }
+
+
+        let moves = this.generateMoves(game, color);
         if (moves.length === 0) return maximizingPlayer ? -30000 + ply : 30000 - ply;
 
         this.scoreMoves(moves, ttMove, ply, game);
@@ -274,6 +292,9 @@ class AI {
         let bestScore = maximizingPlayer ? -Infinity : Infinity;
         let alphaOriginal = alpha;
 
+        let moveCount = 0;
+
+        // PVS (Principal Variation Search)
         if (maximizingPlayer) {
             for (const move of moves) {
                 const movingPiece = game.board[move.from.y][move.from.x];
@@ -286,8 +307,38 @@ class AI {
                 nextHash ^= ZOBRIST.turn;
 
                 this.applyMove(game, move);
-                const score = this.alphaBeta(game, depth - 1, alpha, beta, false, nextHash, ply + 1);
+
+                let score;
+                if (moveCount === 0) {
+                    // Full window search for first move (PV Node)
+                    score = this.alphaBeta(game, depth - 1, alpha, beta, false, nextHash, ply + 1, true);
+                } else {
+                    let R = 0;
+                    if (depth >= 3 && moveCount > 3 && !move.captured) {
+                        R = 1;
+                        if (moveCount > 10) R = 2;
+                        if (depth > 6 && moveCount > 8) R = 3;
+                    }
+
+                    // Scout with LMR
+                    score = this.alphaBeta(game, depth - 1 - R, alpha, alpha + 1, false, nextHash, ply + 1, true);
+
+                    if (score > alpha && score < beta) {
+                        // Fail High in Scout
+                        if (R > 0) {
+                            // Re-search scout with full depth
+                            score = this.alphaBeta(game, depth - 1, alpha, alpha + 1, false, nextHash, ply + 1, true);
+                        }
+                        if (score > alpha && score < beta) {
+                            // Re-search full window
+                            score = this.alphaBeta(game, depth - 1, alpha, beta, false, nextHash, ply + 1, true);
+                        }
+                    }
+                }
+
                 this.undoMove(game, move);
+
+                moveCount++;
 
                 if (this.timeout) return bestScore;
 
@@ -298,12 +349,7 @@ class AI {
                 alpha = Math.max(alpha, score);
                 if (beta <= alpha) {
                     if (!move.captured) {
-                        if (this.killers[ply]) {
-                            this.killers[ply][1] = this.killers[ply][0];
-                            this.killers[ply][0] = move;
-                        }
-                        const hIdx = (move.from.y * 9 + move.from.x) * 90 + (move.to.y * 9 + move.to.x);
-                        if (this.history[hIdx] !== undefined) this.history[hIdx] += (depth * depth);
+                        this.updateHistory(move, depth, ply);
                     }
                     break;
                 }
@@ -320,8 +366,32 @@ class AI {
                 nextHash ^= ZOBRIST.turn;
 
                 this.applyMove(game, move);
-                const score = this.alphaBeta(game, depth - 1, alpha, beta, true, nextHash, ply + 1);
+
+                let score;
+                if (moveCount === 0) {
+                    score = this.alphaBeta(game, depth - 1, alpha, beta, true, nextHash, ply + 1, true);
+                } else {
+                    let R = 0;
+                    if (depth >= 3 && moveCount > 3 && !move.captured) {
+                        R = 1;
+                        if (moveCount > 10) R = 2;
+                        if (depth > 6 && moveCount > 8) R = 3;
+                    }
+
+                    score = this.alphaBeta(game, depth - 1 - R, beta - 1, beta, true, nextHash, ply + 1, true);
+
+                    if (score < beta && score > alpha) {
+                        if (R > 0) {
+                            score = this.alphaBeta(game, depth - 1, beta - 1, beta, true, nextHash, ply + 1, true);
+                        }
+                        if (score < beta && score > alpha) {
+                            score = this.alphaBeta(game, depth - 1, alpha, beta, true, nextHash, ply + 1, true);
+                        }
+                    }
+                }
+
                 this.undoMove(game, move);
+                moveCount++;
 
                 if (this.timeout) return bestScore;
 
@@ -332,12 +402,7 @@ class AI {
                 beta = Math.min(beta, score);
                 if (beta <= alpha) {
                     if (!move.captured) {
-                        if (this.killers[ply]) {
-                            this.killers[ply][1] = this.killers[ply][0];
-                            this.killers[ply][0] = move;
-                        }
-                        const hIdx = (move.from.y * 9 + move.from.x) * 90 + (move.to.y * 9 + move.to.x);
-                        if (this.history[hIdx] !== undefined) this.history[hIdx] += (depth * depth);
+                        this.updateHistory(move, depth, ply);
                     }
                     break;
                 }
@@ -357,6 +422,15 @@ class AI {
         };
 
         return bestScore;
+    }
+
+    updateHistory(move, depth, ply) {
+        if (this.killers[ply]) {
+            this.killers[ply][1] = this.killers[ply][0];
+            this.killers[ply][0] = move;
+        }
+        const hIdx = (move.from.y * 9 + move.from.x) * 90 + (move.to.y * 9 + move.to.x);
+        if (this.history[hIdx] !== undefined) this.history[hIdx] += (depth * depth);
     }
 
     quiescence(game, alpha, beta, maximizingPlayer) {
@@ -430,6 +504,9 @@ class AI {
                 const victimVal = PIECE_VALS[move.captured.slice(1)] || 0;
                 move.score += 1000 + victimVal;
             }
+            // Prioritize Checks (Simple check: if move ends near enemy King?)
+            // Too expensive to calculate isCheck for every move here.
+
             if (this.killers[ply]) {
                 if ((this.killers[ply][0] && this.sameMove(move, this.killers[ply][0])) ||
                     (this.killers[ply][1] && this.sameMove(move, this.killers[ply][1]))) {
@@ -687,25 +764,31 @@ class AI {
                 let val = PIECE_VALS[type] || 0;
                 let pst = 0;
                 let mobility = 0;
+                let structure = 0;
 
-                // Adjust PST coordinate
-                // If Black, flip Y for PST lookup
-                // PST Tables are defined for RED (y=9 is home)
-                // Black home is y=0.
-                // So if Black (isRed=false), we want PST[9-y][x]
                 const py = isRed ? y : (9 - y);
 
                 switch (type) {
-                    case 'so': pst = PST_SO[py][x]; break;
+                    case 'so':
+                        pst = PST_SO[py][x];
+                        // Bonus for approaching palace key points in endgame
+                        if (py <= 4) { // Across river
+                            if (Math.abs(4 - x) <= 2) structure += 20; // Closer to center
+                            if (py <= 1) structure += 30; // Close to palace
+                        }
+                        break;
                     case 'ro':
                         pst = PST_RO[py][x];
-                        // Mobility: Open files are good
-                        // Simple check: blocked neighbor?
-                        mobility = 0;
+                        // Mobility: Check 4 dirs simplified (just immediate squares free?)
+                        // Better: Count how many open squares in 4 dirs? Too slow.
+                        // Medium: Check if blocked.
+                        // Just checking standard mobility (if not trapped).
+                        mobility = 5;
                         break;
                     case 'ma':
                         pst = PST_MA[py][x];
-                        // Central horses are strong
+                        // Important: Check if blocked (horse leg).
+                        // If center horse blocked?
                         break;
                     case 'ca': pst = PST_CA[py][x]; break;
                     case 'ge': pst = PST_GE[py][x]; break;
@@ -713,16 +796,17 @@ class AI {
                     case 'el': pst = PST_EL[py][x]; break;
                 }
 
-                // King Safety (Simple)
-                if (type === 'ge') {
-                    // Check if King is exposed (no Advisors/Elephants nearby?)
-                    // This is handled partly by PST (King stays in center)
-                }
-
-                if (isRed) score += val + pst + mobility;
-                else score -= (val + pst + mobility);
+                if (isRed) score += val + pst + mobility + structure;
+                else score -= (val + pst + mobility + structure);
             }
         }
+
+        // King Safety
+        // If General is exposed (-50)
+        // Check if Advisors exist
+        // Note: this is expensive to query whole board again.
+        // We relied on PST for General (center is good).
+
         return score;
     }
 }

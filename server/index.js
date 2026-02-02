@@ -206,10 +206,11 @@ io.on('connection', (socket) => {
 
         // Determine Time Limit based on difficulty
         // Keep times short to avoid blocking event loop
-        let timeLimit = 5000; // Extreme: 5s (safe max for single thread)
-        if (room.difficulty === 'hard') timeLimit = 3000; // Hard: 3s
-        if (room.difficulty === 'normal') timeLimit = 1500; // Normal: 1.5s
+        let timeLimit = 5000;
+        if (room.difficulty === 'hard') timeLimit = 6000; // Hard: 6s
+        if (room.difficulty === 'normal') timeLimit = 2000; // Normal: 2s
         if (room.difficulty === 'easy') timeLimit = 500; // Easy: 0.5s
+        if (room.difficulty === 'extreme') timeLimit = 15000; // Extreme: 15s - Deep Logic
 
         console.log(`[AI Handler] Starting AI search for room ${roomId}, difficulty: ${room.difficulty}`);
 

@@ -12,41 +12,52 @@
 const BOOK = {
     // === START OF GAME (RED TO MOVE) ===
     "": [
-        { move: { from: { x: 7, y: 7 }, to: { x: 4, y: 7 } }, weight: 50 }, // Central Cannon (Right) - Most aggressive
-        { move: { from: { x: 1, y: 7 }, to: { x: 4, y: 7 } }, weight: 20 }, // Central Cannon (Left)
-        { move: { from: { x: 2, y: 9 }, to: { x: 4, y: 7 } }, weight: 15 }, // Elephant to Center (Solid)
+        { move: { from: { x: 7, y: 7 }, to: { x: 4, y: 7 } }, weight: 45 }, // Central Cannon (Right)
+        { move: { from: { x: 1, y: 7 }, to: { x: 4, y: 7 } }, weight: 25 }, // Central Cannon (Left)
+        { move: { from: { x: 2, y: 9 }, to: { x: 4, y: 7 } }, weight: 15 }, // Elephant to Center
         { move: { from: { x: 6, y: 9 }, to: { x: 4, y: 7 } }, weight: 10 }, // Elephant (Left)
-        { move: { from: { x: 2, y: 9 }, to: { x: 0, y: 7 } }, weight: 5 }   // Elephant Edge (Defensive)
+        { move: { from: { x: 2, y: 6 }, to: { x: 2, y: 5 } }, weight: 3 },  // Pawn 3
+        { move: { from: { x: 6, y: 6 }, to: { x: 6, y: 5 } }, weight: 2 }   // Pawn 7
     ],
 
     // === 1. CENTRAL CANNON (RIGHT) RESPONSE ===
     // Red: 7,7 -> 4,7
     "7,7-4,7": [
         { move: { from: { x: 7, y: 0 }, to: { x: 6, y: 2 } }, weight: 60 }, // Screen Horse (Standard Defense)
-        { move: { from: { x: 7, y: 2 }, to: { x: 4, y: 2 } }, weight: 20 }, // Same Direction Cannon (Aggressive)
-        { move: { from: { x: 1, y: 2 }, to: { x: 4, y: 2 } }, weight: 20 }, // Opposite Direction Cannon (Counter)
+        { move: { from: { x: 1, y: 0 }, to: { x: 2, y: 2 } }, weight: 10 }, // Other Screen Horse
+        { move: { from: { x: 7, y: 2 }, to: { x: 4, y: 2 } }, weight: 15 }, // Same Direction Cannon (Aggressive)
+        { move: { from: { x: 1, y: 2 }, to: { x: 4, y: 2 } }, weight: 15 }, // Opposite Direction Cannon (Counter)
     ],
 
     // 1.1 Red Central Cannon -> Black Screen Horse
     // R: 7,7-4,7 | B: 7,0-6,2
     "7,7-4,7|7,0-6,2": [
         { move: { from: { x: 7, y: 9 }, to: { x: 6, y: 7 } }, weight: 80 }, // Red Horse out (Standard)
-        { move: { from: { x: 1, y: 7 }, to: { x: 4, y: 7 } }, weight: 10 }, // Double Central Cannon (Risky)
+        { move: { from: { x: 1, y: 9 }, to: { x: 2, y: 7 } }, weight: 10 }, // Other Red Horse
+        { move: { from: { x: 8, y: 9 }, to: { x: 8, y: 8 } }, weight: 10 }, // Horizontal Rook (Patrol)
     ],
 
     // 1.1.1 Red Horse -> Black Horse (Screen Horses complete)
     // R: 7,7-4,7 | B: 7,0-6,2 | R: 7,9-6,7
     "7,7-4,7|7,0-6,2|7,9-6,7": [
-        { move: { from: { x: 1, y: 0 }, to: { x: 2, y: 2 } }, weight: 90 }, // Black Second Horse (Full Screen Horses)
-        { move: { from: { x: 8, y: 0 }, to: { x: 8, y: 1 } }, weight: 10 }, // Rook file opening
+        { move: { from: { x: 1, y: 0 }, to: { x: 2, y: 2 } }, weight: 80 }, // Black Second Horse (Full Screen Horses)
+        { move: { from: { x: 8, y: 0 }, to: { x: 8, y: 1 } }, weight: 15 }, // Rook file opening
+        { move: { from: { x: 4, y: 3 }, to: { x: 4, y: 4 } }, weight: 5 },  // Pawn advance
     ],
 
     // 1.1.1.1 Full Screen Horses -> Red Pawn
     // R: 7,7-4,7 | B: 7,0-6,2 | R: 7,9-6,7 | B: 1,0-2,2
     "7,7-4,7|7,0-6,2|7,9-6,7|1,0-2,2": [
-        { move: { from: { x: 4, y: 6 }, to: { x: 4, y: 5 } }, weight: 50 }, // Center Pawn Advance
-        { move: { from: { x: 8, y: 9 }, to: { x: 8, y: 8 } }, weight: 30 }, // Rook 1 step
+        { move: { from: { x: 8, y: 9 }, to: { x: 8, y: 8 } }, weight: 50 }, // Rook 1 step (Chariot)
+        { move: { from: { x: 4, y: 6 }, to: { x: 4, y: 5 } }, weight: 30 }, // Center Pawn Advance
         { move: { from: { x: 6, y: 6 }, to: { x: 6, y: 5 } }, weight: 20 }, // 7th Pawn Advance
+    ],
+
+    // 1.1.1.1.1 Standard Chariot vs Pawn (Pawn vs Pawn)
+    // R: ... | B: ... | R: 8,9 -> 8,8
+    "7,7-4,7|7,0-6,2|7,9-6,7|1,0-2,2|8,9-8,8": [
+        { move: { from: { x: 8, y: 0 }, to: { x: 8, y: 1 } }, weight: 60 }, // Black Rook Match
+        { move: { from: { x: 4, y: 3 }, to: { x: 4, y: 4 } }, weight: 30 }, // Black Pawn
     ],
 
     // === 2. SAME DIRECTION CANNONS ===
@@ -69,13 +80,18 @@ const BOOK = {
         { move: { from: { x: 6, y: 9 }, to: { x: 4, y: 7 } }, weight: 40 }, // Double Elephant
     ],
 
-    // === BLACK STARTING RESPONSES (If User plays Red) ===
-    // Note: The history might look like "move1". This file handles lookups.
+    // === 4. PAWN OPENING ===
+    // R: 2,6 -> 2,5
+    "2,6-2,5": [
+        { move: { from: { x: 7, y: 2 }, to: { x: 4, y: 2 } }, weight: 50 }, // Central Cannon
+        { move: { from: { x: 2, y: 3 }, to: { x: 2, y: 4 } }, weight: 40 }, // Parallel Pawn
+        { move: { from: { x: 7, y: 0 }, to: { x: 6, y: 2 } }, weight: 10 }, // Screen Horse
+    ]
 };
 
 function getBookMove(game) {
-    // Only use book for first 8 plies (4 moves each)
-    if (game.history.length > 8) return null;
+    // Only use book for first 10 plies (5 moves each)
+    if (game.history.length > 10) return null;
 
     const historyKey = game.history.map(m => `${m.from.x},${m.from.y}-${m.to.x},${m.to.y}`).join('|');
     const options = BOOK[historyKey];
