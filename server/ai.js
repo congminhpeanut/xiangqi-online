@@ -91,7 +91,7 @@ const ZOBRIST = {
 })();
 
 function getZobristKey(piece, x, y) {
-    if (!piece || typeof piece !== 'string') return 0; // Guard
+    if (!piece || typeof piece !== 'string') return 0;
     const colors = { 'r': 0, 'b': 1 };
     const types = { 'ro': 0, 'ma': 1, 'el': 2, 'ad': 3, 'ge': 4, 'ca': 5, 'so': 6 };
 
@@ -108,8 +108,8 @@ function getZobristKey(piece, x, y) {
 
 // --- AI CLASS ---
 
-const TT_SIZE = 1 << 18;
-const TT_FLAG = { EXACT: 0, LOWERBOUND: 1, UPPERBOUND: 2 };
+const TT_SIZE = 1 << 20; // 1M entries, enough for ~150MB logic
+const TT_FLAG = { NONE: 0, EXACT: 1, LOWERBOUND: 2, UPPERBOUND: 3 };
 
 class AI {
     constructor(difficulty) {
@@ -119,17 +119,95 @@ class AI {
         this.startTime = 0;
         this.searchTime = 0;
 
-        this.tt = new Array(TT_SIZE).fill(null);
-        // Correct History Table Size: 90 * 90 = 8100 
-        // We will index [from_idx * 90 + to_idx] where idx = y*9 + x
-        this.history = new Int32Array(8100);
-        this.killers = new Array(20).fill(null).map(() => [null, null]);
+        // Structure of Arrays (SoA) for Transposition Table to minimize GC
+        // ttHash: Stores the Zobrist hash (Int32)
+        // ttInfo: Stores Packed Info [Score(16b) | Depth(8b) | Flag(8b)] (Int32)
+        // ttMove: Stores Best Move [From(8b) | To(8b) | Unused(16b)] (Int32)
+        this.ttHash = new Int32Array(TT_SIZE);
+        this.ttInfo = new Int32Array(TT_SIZE);
+        this.ttMove = new Int32Array(TT_SIZE);
+
+        this.history = new Int32Array(90 * 90); // 8100 entries
+        this.killers = new Array(30).fill(null).map(() => [null, null]); // Up to 30 ply
     }
 
     reset() {
-        this.tt.fill(null);
+        this.ttHash.fill(0);
+        this.ttInfo.fill(0);
+        this.ttMove.fill(0);
         this.history.fill(0);
         this.killers.forEach(k => k.fill(null));
+    }
+
+    // --- TT HELPER FUNCTIONS ---
+    storeTT(hash, depth, flag, score, move) {
+        const index = Math.abs(hash % TT_SIZE);
+
+        // Always replace if new search is deeper or same depth, 
+        // OR if the entry is old (naive replacement strategy).
+        // Since we don't store age, we just favor depth.
+        // Actually, for simple TT, just overwrite is often "okay" but depth-preferred is better.
+        const existingInfo = this.ttInfo[index];
+        const existingDepth = (existingInfo >> 16) & 0xFF; // Depth is bits 16-23
+
+        // If existing entry is deeper and same hash, don't overwrite unless we have exact score?
+        // Simple strategy: Overwrite if newDepth >= existingDepth OR existingHash != hash
+        if (this.ttHash[index] !== hash || depth >= existingDepth) {
+            this.ttHash[index] = hash;
+
+            // Score packing: clamp to signed 16-bit [-32768, 32767]
+            let packedScore = Math.max(-32767, Math.min(32767, score));
+
+            // Pack Info: Score (low 16), Depth (next 8), Flag (high 8)
+            // Note: TypedArrays are signed. We need to be careful with bitwise ops.
+            // (Flag << 24) | (Depth << 16) | (Score & 0xFFFF)
+            // Use logical shift for reading, standard for writing.
+            const packedInfo = ((flag & 0xFF) << 24) | ((depth & 0xFF) << 16) | (packedScore & 0xFFFF);
+            this.ttInfo[index] = packedInfo;
+
+            if (move) {
+                // Pack Move: From << 8 | To
+                const fromIdx = move.from.y * 9 + move.from.x;
+                const toIdx = move.to.y * 9 + move.to.x;
+                this.ttMove[index] = (fromIdx << 8) | toIdx;
+            } else {
+                this.ttMove[index] = 0;
+            }
+        }
+    }
+
+    probeTT(hash, depth, alpha, beta) {
+        const index = Math.abs(hash % TT_SIZE);
+        if (this.ttHash[index] === hash) {
+            const info = this.ttInfo[index];
+            const moveData = this.ttMove[index];
+
+            // Extract fields
+            // Score is signed 16-bit. ((val & 0xFFFF) << 16) >> 16 sign extends.
+            const ttScore = ((info & 0xFFFF) << 16) >> 16;
+            const ttDepth = (info >>> 16) & 0xFF;
+            const ttFlag = (info >>> 24) & 0xFF;
+
+            let move = null;
+            if (moveData !== 0) {
+                const fromIdx = (moveData >>> 8) & 0xFF;
+                const toIdx = moveData & 0xFF;
+                move = {
+                    from: { x: fromIdx % 9, y: Math.floor(fromIdx / 9) },
+                    to: { x: toIdx % 9, y: Math.floor(toIdx / 9) }
+                };
+            }
+
+            if (ttDepth >= depth) {
+                if (ttFlag === TT_FLAG.EXACT) return { score: ttScore, move };
+                if (ttFlag === TT_FLAG.LOWERBOUND && ttScore >= beta) return { score: ttScore, move };
+                if (ttFlag === TT_FLAG.UPPERBOUND && ttScore <= alpha) return { score: ttScore, move };
+            }
+
+            // Return move for ordering even if depth is insufficient
+            return { score: null, move };
+        }
+        return null;
     }
 
     getBestMove(game, color, timeLimitMs = 1500) {
@@ -137,7 +215,7 @@ class AI {
             // 1. Opening Book
             const bookMove = getBookMove(game);
             if (bookMove) {
-                console.log(`[AI] Book Move: (${bookMove.from.x},${bookMove.from.y})->(${bookMove.to.x},${bookMove.to.y})`);
+                console.log(`[AI] Book Move`);
                 return bookMove;
             }
 
@@ -150,7 +228,7 @@ class AI {
             let bestMove = null;
             let finalScore = 0;
 
-            // Calculate Initial Zobrist Hash
+            // Initial Hash
             let hash = 0;
             for (let y = 0; y < 10; y++) {
                 for (let x = 0; x < 9; x++) {
@@ -160,287 +238,253 @@ class AI {
             }
             if (!maximize) hash ^= ZOBRIST.turn;
 
-            // Difficulty Depth & Params
+            // Difficulty Configuration
             let maxDepth = 4;
-            let randomness = 0; // 0-100 scale
+            let randomness = 0;
 
-            if (this.difficulty === 'easy') { maxDepth = 2; randomness = 30; }
-            if (this.difficulty === 'normal') { maxDepth = 4; randomness = 10; }
-            if (this.difficulty === 'hard') { maxDepth = 8; randomness = 0; }
-            // Extreme: try to go deep.
-            if (this.difficulty === 'extreme') { maxDepth = 24; randomness = 0; }
+            const profile = this.difficulty;
+            if (profile === 'easy') { maxDepth = 3; randomness = 30; } // The Blunderer (Better 3 plies but errors)
+            if (profile === 'normal') { maxDepth = 5; randomness = 10; } // The Tactician
+            if (profile === 'hard') { maxDepth = 10; randomness = 0; } // The Strategist
+            if (profile === 'extreme') { maxDepth = 24; randomness = 0; } // The Grandmaster
 
-            console.log(`[AI] Start Search. Level: ${this.difficulty}, Time: ${this.searchTime}ms, MaxDepth: ${maxDepth}`);
+            console.log(`\n[AI] Start Search. Level: ${profile}, Time: ${this.searchTime}ms, MaxDepth: ${maxDepth}`);
 
             // Iterative Deepening
             for (let depth = 1; depth <= maxDepth; depth++) {
                 if (Date.now() - this.startTime >= this.searchTime) break;
 
-                // Aspiration Windows (Optimistic search window)
-                let alpha = -Infinity;
-                let beta = Infinity;
-                if (depth > 4) {
-                    alpha = finalScore - 500;
-                    beta = finalScore + 500;
+                // Aspiration Windows
+                let alpha = -20000;
+                let beta = 20000;
+                let windowSize = 50;
+
+                if (depth > 4 && bestMove) { // Only aspirate if we have a guess
+                    alpha = finalScore - windowSize;
+                    beta = finalScore + windowSize;
                 }
 
-                let score = this.alphaBeta(game, depth, alpha, beta, maximize, hash, 0, true);
+                let score = this.searchPVS(game, depth, alpha, beta, maximize, hash, 0, true);
 
-                // If fell out of window, re-search with full window
-                if (alpha !== -Infinity && beta !== Infinity) {
-                    if (score <= alpha || score >= beta) {
-                        console.log(`[AI] Aspiration Fail at depth ${depth} (Score: ${score}), re-searching full width.`);
-                        score = this.alphaBeta(game, depth, -Infinity, Infinity, maximize, hash, 0, true);
+                // Fail Low/High Handling
+                if ((score <= alpha || score >= beta) && !this.timeout) {
+                    if (depth > 4) {
+                        console.log(`[AI] Aspiration Fail at D${depth} (${score}), re-searching full width.`);
+                        alpha = -20000;
+                        beta = 20000;
+                        score = this.searchPVS(game, depth, alpha, beta, maximize, hash, 0, true);
                     }
                 }
 
                 if (this.timeout) {
-                    console.log(`[AI] Timeout at depth ${depth}`);
+                    // Try to preserve previous best move if timeout occurred mid-iteration
+                    console.log(`[AI] Timeout inside D${depth}`);
                     break;
                 }
 
-                const entry = this.tt[Math.abs(hash % TT_SIZE)];
-                if (entry && entry.hash === hash && entry.move) {
-                    bestMove = entry.move;
-                    finalScore = entry.score;
-                    console.log(`[AI] Depth ${depth} Score: ${finalScore} Move: ${bestMove.from.x},${bestMove.from.y}->${bestMove.to.x},${bestMove.to.y}`);
+                // Retrieve PV from TT for best move
+                const probe = this.probeTT(hash, depth, -Infinity, Infinity);
+                if (probe && probe.move) {
+                    bestMove = probe.move;
+                    finalScore = score;
+                    console.log(`[AI] Info Depth ${depth} Score ${finalScore} Nodes ${this.nodeCount} (${(this.nodeCount / (Date.now() - this.startTime) * 1000).toFixed(0)} nps) PV ${probe.move.from.x},${probe.move.from.y}->${probe.move.to.x},${probe.move.to.y}`);
                 }
 
-                // Mate detected
-                if (Math.abs(score) > 20000) break;
+                if (Math.abs(score) > 10000) break; // Mate found
             }
 
-            if (!bestMove) {
-                console.log("[AI] No best move found, generating random.");
-                const moves = this.generateMoves(game, color);
-                if (moves.length > 0) bestMove = moves[Math.floor(Math.random() * moves.length)];
-            } else if (randomness > 0) {
-                // Weighted randomness: sometimes pick the 2nd best or just blunder?
+            // Blunder Logic via Entropy
+            if (bestMove && randomness > 0) {
                 if (Math.random() * 100 < randomness) {
-                    console.log(`[AI] Making a "mistake" due to difficulty ${this.difficulty}`);
+                    console.log(`[AI] Entropy Triggered: Replacing best move with sub-optimal.`);
                     const moves = this.generateMoves(game, color);
                     if (moves.length > 1) {
-                        // Pick a random legal move instead of best
+                        // Sort by score (approx) or just pick random?
+                        // Let's pick 2nd or 3rd random legal move
                         bestMove = moves[Math.floor(Math.random() * moves.length)];
                     }
                 }
             }
 
-            const duration = Date.now() - this.startTime;
-            console.log(`[AI] Finished. Nodes: ${this.nodeCount}, Time: ${duration}ms, NPS: ${Math.round(this.nodeCount / ((duration + 1) / 1000))}`);
+            if (!bestMove) {
+                // Fallback
+                const moves = this.generateMoves(game, color);
+                if (moves.length > 0) bestMove = moves[0];
+            }
 
             return bestMove;
 
         } catch (error) {
-            console.error("[AI] CRITICAL ERROR:", error);
+            console.error("[AI] Error:", error);
             if (error.stack) console.error(error.stack);
             return null;
         }
     }
 
-    alphaBeta(game, depth, alpha, beta, maximizingPlayer, hash, ply, canNull) {
+    // Principal Variation Search
+    searchPVS(game, depth, alpha, beta, maximizingPlayer, hash, ply, canNull) {
         if (this.nodeCount++ % 2048 === 0) {
             if (Date.now() - this.startTime > this.searchTime) this.timeout = true;
         }
-        if (this.timeout) return maximizingPlayer ? -30000 : 30000;
+        if (this.timeout) return alpha;
 
-        const ttIndex = Math.abs(hash % TT_SIZE);
-        const ttEntry = this.tt[ttIndex];
-        let ttMove = null;
+        // TT Probe
+        const ttEntry = this.probeTT(hash, depth, alpha, beta);
+        if (ttEntry && ttEntry.score !== null) return ttEntry.score;
+        const ttMove = ttEntry ? ttEntry.move : null;
 
-        if (ttEntry && ttEntry.hash === hash && ttEntry.depth >= depth) {
-            if (ttEntry.flag === TT_FLAG.EXACT) return ttEntry.score;
-            if (ttEntry.flag === TT_FLAG.LOWERBOUND) alpha = Math.max(alpha, ttEntry.score);
-            else if (ttEntry.flag === TT_FLAG.UPPERBOUND) beta = Math.min(beta, ttEntry.score);
-            if (alpha >= beta) return ttEntry.score;
-            if (ttEntry.move) ttMove = ttEntry.move; // PV Move
-        }
-        if (ttEntry && ttEntry.hash === hash) ttMove = ttEntry.move;
-
-        // Leaf / Quiescence
         if (depth <= 0) {
             return this.quiescence(game, alpha, beta, maximizingPlayer);
         }
 
         const color = maximizingPlayer ? 'red' : 'black';
 
-        // --- NULL MOVE PRUNING ---
-        // Conditions: Not in check, depth >= 3, not root (ply>0)
-        // We assume valid "not in check" if strict logic holds.
-        // For simplicity: skip if ply is small or endgame.
-        if (canNull && ply > 0 && depth >= 3 && !this.isKingInCheck(game, color)) {
-            // Make Null Move (Swap turn)
-            // In Xiangqi, passing is illegal. But we simulate it for pruning.
-            // We pass current color's turn without changing board.
-            // Search with reduced depth.
-            // R = 2
+        // Null Move Pruning
+        if (canNull && depth >= 3 && ply > 0 && !this.isKingInCheck(game, color)) {
             const R = 2;
-            const nullHash = hash ^ ZOBRIST.turn;
-            // Note: flip maximizingPlayer because turn skipped
-            const score = -this.alphaBeta(game, depth - 1 - R, -beta, -beta + 1, !maximizingPlayer, nullHash, ply + 1, false);
+            const nullHash = hash ^ ZOBRIST.turn; // Pass turn
+            const score = -this.searchPVS(game, depth - 1 - R, -beta, -beta + 1, !maximizingPlayer, nullHash, ply + 1, false);
             if (score >= beta) return beta;
         }
 
-
         let moves = this.generateMoves(game, color);
-        if (moves.length === 0) return maximizingPlayer ? -30000 + ply : 30000 - ply;
+        if (moves.length === 0) {
+            return maximizingPlayer ? -15000 + ply : 15000 - ply;
+        }
 
+        // Move Ordering
         this.scoreMoves(moves, ttMove, ply, game);
         moves.sort((a, b) => b.score - a.score);
 
-        let bestMove = null;
-        let bestScore = maximizingPlayer ? -Infinity : Infinity;
-        let alphaOriginal = alpha;
+        // --- PVS Logic with Explicit Max/Min ---
+        // Adapting PVS to non-NegaMax is slightly verbose but safer for this codebase style.
 
+        let bestScore = maximizingPlayer ? -Infinity : Infinity;
+        let bestMove = null;
         let moveCount = 0;
 
-        // PVS (Principal Variation Search)
         if (maximizingPlayer) {
+            let currentAlpha = alpha;
             for (const move of moves) {
-                const movingPiece = game.board[move.from.y][move.from.x];
-                const captured = game.board[move.to.y][move.to.x];
-
-                let nextHash = hash;
-                nextHash ^= getZobristKey(movingPiece, move.from.x, move.from.y);
-                if (captured) nextHash ^= getZobristKey(captured, move.to.x, move.to.y);
-                nextHash ^= getZobristKey(movingPiece, move.to.x, move.to.y);
-                nextHash ^= ZOBRIST.turn;
-
+                const moveKey = this.makeMoveHash(game, move, hash);
                 this.applyMove(game, move);
 
                 let score;
                 if (moveCount === 0) {
-                    // Full window search for first move (PV Node)
-                    score = this.alphaBeta(game, depth - 1, alpha, beta, false, nextHash, ply + 1, true);
+                    score = this.searchPVS(game, depth - 1, currentAlpha, beta, false, moveKey, ply + 1, true);
                 } else {
+                    // LMR
                     let R = 0;
-                    if (depth >= 3 && moveCount > 3 && !move.captured) {
+                    if (depth >= 3 && moveCount > 4 && !move.captured) {
                         R = 1;
-                        if (moveCount > 10) R = 2;
-                        if (depth > 6 && moveCount > 8) R = 3;
+                        if (depth > 6 && moveCount > 10) R = 2;
                     }
 
-                    // Scout with LMR
-                    score = this.alphaBeta(game, depth - 1 - R, alpha, alpha + 1, false, nextHash, ply + 1, true);
+                    // PVS Scout
+                    // Search with null window [alpha, alpha+1]
+                    // If LMR, reduce depth
+                    score = this.searchPVS(game, depth - 1 - R, currentAlpha, currentAlpha + 1, false, moveKey, ply + 1, true);
 
-                    if (score > alpha && score < beta) {
-                        // Fail High in Scout
-                        if (R > 0) {
-                            // Re-search scout with full depth
-                            score = this.alphaBeta(game, depth - 1, alpha, alpha + 1, false, nextHash, ply + 1, true);
-                        }
-                        if (score > alpha && score < beta) {
-                            // Re-search full window
-                            score = this.alphaBeta(game, depth - 1, alpha, beta, false, nextHash, ply + 1, true);
-                        }
+                    if (score > currentAlpha && R > 0) {
+                        // Re-search at full depth if LMR failed
+                        score = this.searchPVS(game, depth - 1, currentAlpha, currentAlpha + 1, false, moveKey, ply + 1, true);
+                    }
+
+                    if (score > currentAlpha && score < beta) {
+                        // Fail high on null window -> full window re-search
+                        score = this.searchPVS(game, depth - 1, currentAlpha, beta, false, moveKey, ply + 1, true);
                     }
                 }
 
                 this.undoMove(game, move);
-
                 moveCount++;
 
-                if (this.timeout) return bestScore;
+                if (this.timeout) return currentAlpha;
 
                 if (score > bestScore) {
                     bestScore = score;
                     bestMove = move;
                 }
-                alpha = Math.max(alpha, score);
-                if (beta <= alpha) {
-                    if (!move.captured) {
-                        this.updateHistory(move, depth, ply);
-                    }
+                if (score > currentAlpha) {
+                    currentAlpha = score;
+                }
+                if (currentAlpha >= beta) {
+                    if (!move.captured) this.updateHistory(move, depth, ply);
                     break;
                 }
             }
+
+            // Store TT
+            let flag = TT_FLAG.EXACT;
+            if (bestScore <= alpha) flag = TT_FLAG.UPPERBOUND;
+            else if (bestScore >= beta) flag = TT_FLAG.LOWERBOUND;
+            this.storeTT(hash, depth, flag, bestScore, bestMove);
+            return bestScore;
+
         } else {
+            // Minimizing
+            let currentBeta = beta;
+            bestScore = Infinity; // Corrected
+
             for (const move of moves) {
-                const movingPiece = game.board[move.from.y][move.from.x];
-                const captured = game.board[move.to.y][move.to.x];
-
-                let nextHash = hash;
-                nextHash ^= getZobristKey(movingPiece, move.from.x, move.from.y);
-                if (captured) nextHash ^= getZobristKey(captured, move.to.x, move.to.y);
-                nextHash ^= getZobristKey(movingPiece, move.to.x, move.to.y);
-                nextHash ^= ZOBRIST.turn;
-
+                const moveKey = this.makeMoveHash(game, move, hash);
                 this.applyMove(game, move);
 
                 let score;
                 if (moveCount === 0) {
-                    score = this.alphaBeta(game, depth - 1, alpha, beta, true, nextHash, ply + 1, true);
+                    score = this.searchPVS(game, depth - 1, alpha, currentBeta, true, moveKey, ply + 1, true);
                 } else {
                     let R = 0;
-                    if (depth >= 3 && moveCount > 3 && !move.captured) {
+                    if (depth >= 3 && moveCount > 4 && !move.captured) {
                         R = 1;
-                        if (moveCount > 10) R = 2;
-                        if (depth > 6 && moveCount > 8) R = 3;
+                        if (depth > 6 && moveCount > 10) R = 2;
                     }
 
-                    score = this.alphaBeta(game, depth - 1 - R, beta - 1, beta, true, nextHash, ply + 1, true);
+                    // Scout with Null Window [beta-1, beta]
+                    score = this.searchPVS(game, depth - 1 - R, currentBeta - 1, currentBeta, true, moveKey, ply + 1, true);
 
-                    if (score < beta && score > alpha) {
-                        if (R > 0) {
-                            score = this.alphaBeta(game, depth - 1, beta - 1, beta, true, nextHash, ply + 1, true);
-                        }
-                        if (score < beta && score > alpha) {
-                            score = this.alphaBeta(game, depth - 1, alpha, beta, true, nextHash, ply + 1, true);
-                        }
+                    if (score < currentBeta && R > 0) {
+                        score = this.searchPVS(game, depth - 1, currentBeta - 1, currentBeta, true, moveKey, ply + 1, true);
+                    }
+
+                    if (score < currentBeta && score > alpha) {
+                        score = this.searchPVS(game, depth - 1, alpha, currentBeta, true, moveKey, ply + 1, true);
                     }
                 }
 
                 this.undoMove(game, move);
                 moveCount++;
 
-                if (this.timeout) return bestScore;
+                if (this.timeout) return currentBeta;
 
                 if (score < bestScore) {
                     bestScore = score;
                     bestMove = move;
                 }
-                beta = Math.min(beta, score);
-                if (beta <= alpha) {
-                    if (!move.captured) {
-                        this.updateHistory(move, depth, ply);
-                    }
+                if (score < currentBeta) {
+                    currentBeta = score;
+                }
+                if (currentBeta <= alpha) {
+                    if (!move.captured) this.updateHistory(move, depth, ply);
                     break;
                 }
             }
+
+            let flag = TT_FLAG.EXACT;
+            if (bestScore >= beta) flag = TT_FLAG.LOWERBOUND;
+            else if (bestScore <= alpha) flag = TT_FLAG.UPPERBOUND;
+            this.storeTT(hash, depth, flag, bestScore, bestMove);
+            return bestScore;
         }
-
-        let flag = TT_FLAG.EXACT;
-        if (bestScore <= alphaOriginal) flag = TT_FLAG.UPPERBOUND;
-        else if (bestScore >= beta) flag = TT_FLAG.LOWERBOUND;
-
-        this.tt[ttIndex] = {
-            hash: hash,
-            depth: depth,
-            score: bestScore,
-            flag: flag,
-            move: bestMove
-        };
-
-        return bestScore;
-    }
-
-    updateHistory(move, depth, ply) {
-        if (this.killers[ply]) {
-            this.killers[ply][1] = this.killers[ply][0];
-            this.killers[ply][0] = move;
-        }
-        const hIdx = (move.from.y * 9 + move.from.x) * 90 + (move.to.y * 9 + move.to.x);
-        if (this.history[hIdx] !== undefined) this.history[hIdx] += (depth * depth);
     }
 
     quiescence(game, alpha, beta, maximizingPlayer) {
         if (this.nodeCount++ % 2048 === 0) {
             if (Date.now() - this.startTime > this.searchTime) this.timeout = true;
         }
-        if (this.timeout) return this.evaluate(game);
+        if (this.timeout) return maximizingPlayer ? -15000 : 15000;
 
         const standPat = this.evaluate(game);
-
         if (maximizingPlayer) {
             if (standPat >= beta) return beta;
             if (alpha < standPat) alpha = standPat;
@@ -450,26 +494,20 @@ class AI {
         }
 
         const color = maximizingPlayer ? 'red' : 'black';
-        // Generate Captures Only
-        const moves = this.generateMoves(game, color, true);
+        const moves = this.generateMoves(game, color, true); // Captures Only
 
-        // MVV-LVA Sorting
-        for (const move of moves) {
-            const captured = game.board[move.to.y][move.to.x];
-            const victimVal = captured ? (PIECE_VALS[captured.slice(1)] || 0) : 0;
-            const attackerVal = PIECE_VALS[game.board[move.from.y][move.from.x].slice(1)] || 0;
-            move.score = 1000 + victimVal * 10 - attackerVal;
-        }
-        moves.sort((a, b) => b.score - a.score);
+        moves.sort((a, b) => {
+            const vicA = PIECE_VALS[a.captured.slice(1)] || 0;
+            const vicB = PIECE_VALS[b.captured.slice(1)] || 0;
+            return vicB - vicA;
+        });
 
         if (maximizingPlayer) {
             for (const move of moves) {
                 this.applyMove(game, move);
                 const score = this.quiescence(game, alpha, beta, false);
                 this.undoMove(game, move);
-
                 if (this.timeout) return alpha;
-
                 if (score > alpha) {
                     alpha = score;
                     if (beta <= alpha) break;
@@ -481,9 +519,7 @@ class AI {
                 this.applyMove(game, move);
                 const score = this.quiescence(game, alpha, beta, true);
                 this.undoMove(game, move);
-
                 if (this.timeout) return beta;
-
                 if (score < beta) {
                     beta = score;
                     if (beta <= alpha) break;
@@ -493,32 +529,150 @@ class AI {
         }
     }
 
+    evaluate(game) {
+        let score = 0;
+
+        // Full evaluation with mobility and king safety
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                const piece = game.board[y][x];
+                if (!piece) continue;
+
+                const isRed = (piece.charAt(0) === 'r');
+                const type = piece.slice(1);
+                let val = PIECE_VALS[type] || 0;
+                let pst = 0;
+                let mobility = 0;
+                let safety = 0;
+
+                const py = isRed ? y : (9 - y);
+
+                switch (type) {
+                    case 'so':
+                        pst = PST_SO[py][x];
+                        if (py <= 4) {
+                            if (Math.abs(4 - x) <= 2) pst += 20;
+                            if (py <= 1) pst += 30;
+                        }
+                        break;
+                    case 'ma':
+                        pst = PST_MA[py][x];
+                        mobility += this.countHorseMobility(game, x, y) * 5;
+                        break;
+                    case 'ro':
+                        pst = PST_RO[py][x];
+                        mobility += this.countRookMobility(game, x, y) * 2;
+                        break;
+                    case 'ca':
+                        pst = PST_CA[py][x];
+                        mobility += this.countRookMobility(game, x, y) * 2;
+                        break;
+                    case 'ge':
+                        pst = PST_GE[py][x];
+                        safety = this.evaluateKingSafety(game, x, y, isRed);
+                        break;
+                    case 'el': pst = PST_EL[py][x]; break;
+                    case 'ad': pst = PST_AD[py][x]; break;
+                }
+
+                const materialScore = val + pst + mobility + safety;
+                if (isRed) score += materialScore;
+                else score -= materialScore;
+            }
+        }
+        return score;
+    }
+
+    countHorseMobility(game, x, y) {
+        const jumps = [
+            { dx: 1, dy: -2, lx: 0, ly: -1 }, { dx: -1, dy: -2, lx: 0, ly: -1 },
+            { dx: 1, dy: 2, lx: 0, ly: 1 }, { dx: -1, dy: 2, lx: 0, ly: 1 },
+            { dx: 2, dy: -1, lx: 1, ly: 0 }, { dx: 2, dy: 1, lx: 1, ly: 0 },
+            { dx: -2, dy: -1, lx: -1, ly: 0 }, { dx: -2, dy: 1, lx: -1, ly: 0 }
+        ];
+        let moves = 0;
+        for (const j of jumps) {
+            const tx = x + j.dx, ty = y + j.dy;
+            if (tx >= 0 && tx <= 8 && ty >= 0 && ty <= 9) {
+                if (!game.board[y + j.ly][x + j.lx]) moves++;
+            }
+        }
+        return moves;
+    }
+
+    countRookMobility(game, x, y) {
+        let free = 0;
+        if (x > 0 && !game.board[y][x - 1]) free++;
+        if (x < 8 && !game.board[y][x + 1]) free++;
+        if (y > 0 && !game.board[y - 1][x]) free++;
+        if (y < 9 && !game.board[y + 1][x]) free++;
+        return free;
+    }
+
+    evaluateKingSafety(game, kx, ky, isRed) {
+        let shield = 0;
+        // Advisors
+        const palaceY = isRed ? [7, 8, 9] : [0, 1, 2];
+        const palaceX = [3, 4, 5];
+        const myAd = isRed ? 'rad' : 'bad';
+        const myEl = isRed ? 'rel' : 'bel';
+
+        for (let py of palaceY) {
+            for (let px of palaceX) {
+                if (game.board[py][px] === myAd) shield += 15;
+            }
+        }
+        return shield;
+    }
+
     scoreMoves(moves, ttMove, ply, game) {
         for (const move of moves) {
             move.score = 0;
             if (ttMove && this.sameMove(move, ttMove)) {
-                move.score += 20000;
+                move.score = 20000;
                 continue;
             }
             if (move.captured) {
                 const victimVal = PIECE_VALS[move.captured.slice(1)] || 0;
-                move.score += 1000 + victimVal;
+                const attackerVal = PIECE_VALS[game.board[move.from.y][move.from.x].slice(1)] || 0;
+                move.score = 1000 + victimVal * 10 - attackerVal;
             }
-            // Prioritize Checks (Simple check: if move ends near enemy King?)
-            // Too expensive to calculate isCheck for every move here.
-
             if (this.killers[ply]) {
-                if ((this.killers[ply][0] && this.sameMove(move, this.killers[ply][0])) ||
-                    (this.killers[ply][1] && this.sameMove(move, this.killers[ply][1]))) {
-                    move.score += 900;
-                }
+                if ((this.killers[ply][0] && this.sameMove(move, this.killers[ply][0]))) move.score += 900;
+                else if ((this.killers[ply][1] && this.sameMove(move, this.killers[ply][1]))) move.score += 800;
             }
             const hIdx = (move.from.y * 9 + move.from.x) * 90 + (move.to.y * 9 + move.to.x);
-            if (this.history[hIdx]) move.score += this.history[hIdx] / 1000;
+            if (this.history[hIdx]) move.score += this.history[hIdx];
         }
     }
 
+    updateHistory(move, depth, ply) {
+        if (this.killers[ply]) {
+            if (!this.sameMove(move, this.killers[ply][0])) {
+                this.killers[ply][1] = this.killers[ply][0];
+                this.killers[ply][0] = move;
+            }
+        }
+        const hIdx = (move.from.y * 9 + move.from.x) * 90 + (move.to.y * 9 + move.to.x);
+        if (this.history[hIdx] < 1000000) {
+            this.history[hIdx] += depth * depth;
+        }
+    }
+
+    makeMoveHash(game, move, currentHash) {
+        const movingPiece = game.board[move.from.y][move.from.x];
+        const captured = game.board[move.to.y][move.to.x];
+
+        let nextHash = currentHash;
+        nextHash ^= getZobristKey(movingPiece, move.from.x, move.from.y);
+        if (captured) nextHash ^= getZobristKey(captured, move.to.x, move.to.y);
+        nextHash ^= getZobristKey(movingPiece, move.to.x, move.to.y);
+        nextHash ^= ZOBRIST.turn;
+        return nextHash;
+    }
+
     sameMove(a, b) {
+        if (!a || !b) return false;
         return a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
     }
 
@@ -545,18 +699,13 @@ class AI {
 
         const legalMoves = [];
         for (const move of moves) {
-            // Apply
             const captured = game.board[move.to.y][move.to.x];
             game.board[move.to.y][move.to.x] = game.board[move.from.y][move.from.x];
             game.board[move.from.y][move.from.x] = null;
-
-            // Check
             if (!this.isKingInCheck(game, color)) {
                 move.captured = captured;
                 legalMoves.push(move);
             }
-
-            // Revert
             game.board[move.from.y][move.from.x] = game.board[move.to.y][move.to.x];
             game.board[move.to.y][move.to.x] = captured;
         }
@@ -572,7 +721,6 @@ class AI {
             moves.push({ from: { x: fx, y: fy }, to: { x: tx, y: ty } });
         }
     }
-
     genSoldierMoves(game, x, y, color, moves, capturesOnly) {
         const forward = color === 'red' ? -1 : 1;
         const fy = y + forward;
@@ -677,6 +825,7 @@ class AI {
         }
     }
 
+    // King Check (reused but ensures availability)
     isKingInCheck(game, color) {
         let kx, ky;
         const kingType = color === 'red' ? 'rge' : 'bge';
@@ -691,7 +840,6 @@ class AI {
         if (!found) return true;
 
         const enemyPrefix = color === 'red' ? 'b' : 'r';
-
         const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
         for (const [dx, dy] of dirs) {
             let cx = kx + dx, cy = ky + dy;
@@ -721,7 +869,6 @@ class AI {
                 cx += dx; cy += dy;
             }
         }
-
         const hJumps = [
             { dx: 1, dy: -2, lx: 0, ly: -1 }, { dx: -1, dy: -2, lx: 0, ly: -1 },
             { dx: 1, dy: 2, lx: 0, ly: 1 }, { dx: -1, dy: 2, lx: 0, ly: 1 },
@@ -748,66 +895,6 @@ class AI {
     undoMove(game, move) {
         game.board[move.from.y][move.from.x] = game.board[move.to.y][move.to.x];
         game.board[move.to.y][move.to.x] = move.captured;
-    }
-
-    evaluate(game) {
-        let score = 0;
-
-        // Material & PST
-        for (let y = 0; y < 10; y++) {
-            for (let x = 0; x < 9; x++) {
-                const piece = game.board[y][x];
-                if (!piece) continue;
-
-                const isRed = (piece.charAt(0) === 'r');
-                const type = piece.slice(1);
-                let val = PIECE_VALS[type] || 0;
-                let pst = 0;
-                let mobility = 0;
-                let structure = 0;
-
-                const py = isRed ? y : (9 - y);
-
-                switch (type) {
-                    case 'so':
-                        pst = PST_SO[py][x];
-                        // Bonus for approaching palace key points in endgame
-                        if (py <= 4) { // Across river
-                            if (Math.abs(4 - x) <= 2) structure += 20; // Closer to center
-                            if (py <= 1) structure += 30; // Close to palace
-                        }
-                        break;
-                    case 'ro':
-                        pst = PST_RO[py][x];
-                        // Mobility: Check 4 dirs simplified (just immediate squares free?)
-                        // Better: Count how many open squares in 4 dirs? Too slow.
-                        // Medium: Check if blocked.
-                        // Just checking standard mobility (if not trapped).
-                        mobility = 5;
-                        break;
-                    case 'ma':
-                        pst = PST_MA[py][x];
-                        // Important: Check if blocked (horse leg).
-                        // If center horse blocked?
-                        break;
-                    case 'ca': pst = PST_CA[py][x]; break;
-                    case 'ge': pst = PST_GE[py][x]; break;
-                    case 'ad': pst = PST_AD[py][x]; break;
-                    case 'el': pst = PST_EL[py][x]; break;
-                }
-
-                if (isRed) score += val + pst + mobility + structure;
-                else score -= (val + pst + mobility + structure);
-            }
-        }
-
-        // King Safety
-        // If General is exposed (-50)
-        // Check if Advisors exist
-        // Note: this is expensive to query whole board again.
-        // We relied on PST for General (center is good).
-
-        return score;
     }
 }
 

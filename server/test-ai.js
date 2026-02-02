@@ -2,7 +2,7 @@ const XiangqiGame = require('./game');
 const AI = require('./ai');
 
 // Test AI for BLACK player (as server calls it)
-console.log("=== Test AI for Black Player ===\n");
+console.log("=== Test AI for Black Player (HARD MODE) ===\n");
 
 const game = new XiangqiGame();
 
@@ -11,9 +11,9 @@ console.log("Making initial Red move...");
 game.makeMove(0, 9, 0, 8); // Red Chariot moves forward
 
 console.log("Current turn:", game.turn);
-console.log("Testing Easy mode first (quick)...\n");
+console.log("Testing Hard mode...\n");
 
-const ai = new AI('easy');
+const ai = new AI('hard');
 const move = ai.getBestMove(game, 'black', 4000);
 
 if (move) {
@@ -23,7 +23,6 @@ if (move) {
     // Verify move is valid
     const piece = game.board[move.from.y][move.from.x];
     console.log(`Piece at from: ${piece}`);
-    console.log(`Piece starts with 'b': ${piece && piece.startsWith('b')}`);
 } else {
     console.log("\n=== FAIL ===");
     console.log("No move returned!");
