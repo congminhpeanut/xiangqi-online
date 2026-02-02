@@ -206,10 +206,10 @@ io.on('connection', (socket) => {
 
         // Determine Time Limit based on difficulty
         // Keep times short to avoid blocking event loop
-        let timeLimit = 20000; // Extreme: 20s (max safe blocking time)
-        if (room.difficulty === 'hard') timeLimit = 10000; // Hard: 10s
-        if (room.difficulty === 'normal') timeLimit = 5000; // Normal: 5s
-        if (room.difficulty === 'easy') timeLimit = 2000; // Easy: 2s
+        let timeLimit = 5000; // Extreme: 5s (safe max for single thread)
+        if (room.difficulty === 'hard') timeLimit = 3000; // Hard: 3s
+        if (room.difficulty === 'normal') timeLimit = 1500; // Normal: 1.5s
+        if (room.difficulty === 'easy') timeLimit = 500; // Easy: 0.5s
 
         console.log(`[AI Handler] Starting AI search for room ${roomId}, difficulty: ${room.difficulty}`);
 

@@ -141,9 +141,8 @@ class AI {
                 return bookMove;
             }
 
-
             this.startTime = Date.now();
-            this.searchTime = Math.max(100, timeLimitMs - 50);
+            this.searchTime = Math.max(100, timeLimitMs - 100);
             this.timeout = false;
             this.nodeCount = 0;
 
@@ -161,12 +160,14 @@ class AI {
             }
             if (!maximize) hash ^= ZOBRIST.turn;
 
-            // Difficulty Depth
-            let maxDepth = 6;
-            if (this.difficulty === 'easy') maxDepth = 2;
-            if (this.difficulty === 'normal') maxDepth = 4;
-            if (this.difficulty === 'hard') maxDepth = 6;
-            if (this.difficulty === 'extreme') maxDepth = 8;
+            // Difficulty Depth & Params
+            let maxDepth = 4;
+            let randomness = 0; // 0-100 scale
+
+            if (this.difficulty === 'easy') { maxDepth = 2; randomness = 30; }
+            if (this.difficulty === 'normal') { maxDepth = 4; randomness = 10; }
+            if (this.difficulty === 'hard') { maxDepth = 6; randomness = 0; }
+            if (this.difficulty === 'extreme') { maxDepth = 8; randomness = 0; }
 
             console.log(`[AI] Start Search. Level: ${this.difficulty}, Time: ${this.searchTime}ms, MaxDepth: ${maxDepth}`);
 
@@ -174,7 +175,23 @@ class AI {
             for (let depth = 1; depth <= maxDepth; depth++) {
                 if (Date.now() - this.startTime >= this.searchTime) break;
 
-                const score = this.alphaBeta(game, depth, -Infinity, Infinity, maximize, hash, 0);
+                // Aspiration Windows (Optimistic search window)
+                let alpha = -Infinity;
+                let beta = Infinity;
+                if (depth > 4) {
+                    alpha = finalScore - 500;
+                    beta = finalScore + 500;
+                }
+
+                let score = this.alphaBeta(game, depth, alpha, beta, maximize, hash, 0);
+
+                // If fell out of window, re-search with full window
+                if (alpha !== -Infinity && beta !== Infinity) {
+                    if (score <= alpha || score >= beta) {
+                        console.log(`[AI] Aspiration Fail at depth ${depth} (Score: ${score}), re-searching full width.`);
+                        score = this.alphaBeta(game, depth, -Infinity, Infinity, maximize, hash, 0);
+                    }
+                }
 
                 if (this.timeout) {
                     console.log(`[AI] Timeout at depth ${depth}`);
@@ -185,16 +202,28 @@ class AI {
                 if (entry && entry.hash === hash && entry.move) {
                     bestMove = entry.move;
                     finalScore = entry.score;
-                    console.log(`[AI] Depth ${depth} Score: ${finalScore} Move: ${JSON.stringify(bestMove)}`);
+                    console.log(`[AI] Depth ${depth} Score: ${finalScore} Move: ${bestMove.from.x},${bestMove.from.y}->${bestMove.to.x},${bestMove.to.y}`);
                 }
 
+                // Mate detected
                 if (Math.abs(score) > 20000) break;
             }
 
             if (!bestMove) {
                 console.log("[AI] No best move found, generating random.");
                 const moves = this.generateMoves(game, color);
-                if (moves.length > 0) bestMove = moves[0];
+                if (moves.length > 0) bestMove = moves[Math.floor(Math.random() * moves.length)];
+            } else if (randomness > 0) {
+                // Weighted randomness: sometimes pick the 2nd best or just blunder?
+                // For now, simple blunder check
+                if (Math.random() * 100 < randomness) {
+                    console.log(`[AI] Making a "mistake" due to difficulty ${this.difficulty}`);
+                    const moves = this.generateMoves(game, color);
+                    if (moves.length > 1) {
+                        // Pick a random legal move instead of best
+                        bestMove = moves[Math.floor(Math.random() * moves.length)];
+                    }
+                }
             }
 
             const duration = Date.now() - this.startTime;
@@ -228,10 +257,9 @@ class AI {
         }
         if (ttEntry && ttEntry.hash === hash) ttMove = ttEntry.move;
 
-        // Leaf / Quiescence (Disabled pure QS for stability first, just use eval at depth <= 0)
+        // Leaf / Quiescence (Call QS instead of Eval)
         if (depth <= 0) {
-            // return this.quiescence(game, alpha, beta, maximizingPlayer);
-            return this.evaluate(game);
+            return this.quiescence(game, alpha, beta, maximizingPlayer);
         }
 
         const color = maximizingPlayer ? 'red' : 'black';
@@ -247,7 +275,6 @@ class AI {
         let alphaOriginal = alpha;
 
         if (maximizingPlayer) {
-            bestScore = -Infinity;
             for (const move of moves) {
                 const movingPiece = game.board[move.from.y][move.from.x];
                 const captured = game.board[move.to.y][move.to.x];
@@ -282,7 +309,6 @@ class AI {
                 }
             }
         } else {
-            bestScore = Infinity;
             for (const move of moves) {
                 const movingPiece = game.board[move.from.y][move.from.x];
                 const captured = game.board[move.to.y][move.to.x];
@@ -334,9 +360,63 @@ class AI {
     }
 
     quiescence(game, alpha, beta, maximizingPlayer) {
-        // Disabled for safety
-        // To re-enable, simply uncomment call in alphaBeta
-        return this.evaluate(game);
+        if (this.nodeCount++ % 2048 === 0) {
+            if (Date.now() - this.startTime > this.searchTime) this.timeout = true;
+        }
+        if (this.timeout) return this.evaluate(game);
+
+        const standPat = this.evaluate(game);
+
+        if (maximizingPlayer) {
+            if (standPat >= beta) return beta;
+            if (alpha < standPat) alpha = standPat;
+        } else {
+            if (standPat <= alpha) return alpha;
+            if (beta > standPat) beta = standPat;
+        }
+
+        const color = maximizingPlayer ? 'red' : 'black';
+        // Generate Captures Only
+        const moves = this.generateMoves(game, color, true);
+
+        // MVV-LVA Sorting
+        for (const move of moves) {
+            const captured = game.board[move.to.y][move.to.x];
+            const victimVal = captured ? (PIECE_VALS[captured.slice(1)] || 0) : 0;
+            const attackerVal = PIECE_VALS[game.board[move.from.y][move.from.x].slice(1)] || 0;
+            move.score = 1000 + victimVal * 10 - attackerVal;
+        }
+        moves.sort((a, b) => b.score - a.score);
+
+        if (maximizingPlayer) {
+            for (const move of moves) {
+                this.applyMove(game, move);
+                const score = this.quiescence(game, alpha, beta, false);
+                this.undoMove(game, move);
+
+                if (this.timeout) return alpha;
+
+                if (score > alpha) {
+                    alpha = score;
+                    if (beta <= alpha) break;
+                }
+            }
+            return alpha;
+        } else {
+            for (const move of moves) {
+                this.applyMove(game, move);
+                const score = this.quiescence(game, alpha, beta, true);
+                this.undoMove(game, move);
+
+                if (this.timeout) return beta;
+
+                if (score < beta) {
+                    beta = score;
+                    if (beta <= alpha) break;
+                }
+            }
+            return beta;
+        }
     }
 
     scoreMoves(moves, ttMove, ply, game) {
@@ -595,39 +675,52 @@ class AI {
 
     evaluate(game) {
         let score = 0;
+
+        // Material & PST
         for (let y = 0; y < 10; y++) {
             for (let x = 0; x < 9; x++) {
                 const piece = game.board[y][x];
                 if (!piece) continue;
+
                 const isRed = (piece.charAt(0) === 'r');
                 const type = piece.slice(1);
                 let val = PIECE_VALS[type] || 0;
                 let pst = 0;
+                let mobility = 0;
 
-                if (isRed) {
-                    switch (type) {
-                        case 'so': pst = PST_SO[y][x]; break;
-                        case 'ro': pst = PST_RO[y][x]; break;
-                        case 'ma': pst = PST_MA[y][x]; break;
-                        case 'ca': pst = PST_CA[y][x]; break;
-                        case 'ge': pst = PST_GE[y][x]; break;
-                        case 'ad': pst = PST_AD[y][x]; break;
-                        case 'el': pst = PST_EL[y][x]; break;
-                    }
-                } else {
-                    const ry = 9 - y;
-                    switch (type) {
-                        case 'so': pst = PST_SO[ry][x]; break;
-                        case 'ro': pst = PST_RO[ry][x]; break;
-                        case 'ma': pst = PST_MA[ry][x]; break;
-                        case 'ca': pst = PST_CA[ry][x]; break;
-                        case 'ge': pst = PST_GE[ry][x]; break;
-                        case 'ad': pst = PST_AD[ry][x]; break;
-                        case 'el': pst = PST_EL[ry][x]; break;
-                    }
+                // Adjust PST coordinate
+                // If Black, flip Y for PST lookup
+                // PST Tables are defined for RED (y=9 is home)
+                // Black home is y=0.
+                // So if Black (isRed=false), we want PST[9-y][x]
+                const py = isRed ? y : (9 - y);
+
+                switch (type) {
+                    case 'so': pst = PST_SO[py][x]; break;
+                    case 'ro':
+                        pst = PST_RO[py][x];
+                        // Mobility: Open files are good
+                        // Simple check: blocked neighbor?
+                        mobility = 0;
+                        break;
+                    case 'ma':
+                        pst = PST_MA[py][x];
+                        // Central horses are strong
+                        break;
+                    case 'ca': pst = PST_CA[py][x]; break;
+                    case 'ge': pst = PST_GE[py][x]; break;
+                    case 'ad': pst = PST_AD[py][x]; break;
+                    case 'el': pst = PST_EL[py][x]; break;
                 }
 
-                if (isRed) score += val + pst; else score -= (val + pst);
+                // King Safety (Simple)
+                if (type === 'ge') {
+                    // Check if King is exposed (no Advisors/Elephants nearby?)
+                    // This is handled partly by PST (King stays in center)
+                }
+
+                if (isRed) score += val + pst + mobility;
+                else score -= (val + pst + mobility);
             }
         }
         return score;
