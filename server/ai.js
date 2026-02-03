@@ -43,17 +43,28 @@ const PST_MA = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0],
     [-2, -2, -2, -2, -2, -2, -2, -2, -2]
 ];
+// Aggressive Cannon PST - encourages firing positions and central pressure
 const PST_CA = [
-    [5, 5, 10, 15, 20, 15, 10, 5, 5],
-    [5, 5, 10, 10, 10, 10, 10, 5, 5],
-    [5, 5, 10, 15, 15, 15, 10, 5, 5],
-    [5, 5, 10, 10, 10, 10, 10, 5, 5],
-    [5, 10, 10, 10, 10, 10, 10, 10, 5],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [2, 2, 2, 5, 10, 5, 2, 2, 2],
-    [2, 2, 2, 2, 5, 2, 2, 2, 2],
-    [2, 2, 2, 2, 5, 2, 2, 2, 2]
+    // y=0: Enemy back rank - high pressure positions
+    [8, 12, 20, 30, 40, 30, 20, 12, 8],
+    // y=1: Second rank - strong central pressure
+    [8, 12, 18, 28, 35, 28, 18, 12, 8],
+    // y=2: Third rank - prime firing positions
+    [10, 15, 22, 30, 38, 30, 22, 15, 10],
+    // y=3: Fourth rank - attacking zone
+    [10, 15, 20, 28, 35, 28, 20, 15, 10],
+    // y=4: River line - crossing bonus
+    [8, 12, 18, 25, 30, 25, 18, 12, 8],
+    // y=5: Own river side - neutral
+    [5, 8, 10, 15, 18, 15, 10, 8, 5],
+    // y=6: Own territory
+    [2, 5, 8, 12, 15, 12, 8, 5, 2],
+    // y=7: Development squares
+    [0, 2, 5, 10, 12, 10, 5, 2, 0],
+    // y=8: Back rank - slight penalty for stagnation
+    [-2, 0, 2, 5, 8, 5, 2, 0, -2],
+    // y=9: Corner penalty
+    [-5, -2, 0, 2, 5, 2, 0, -2, -5]
 ];
 const PST_AD = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -323,7 +334,8 @@ class AI {
 
     // Principal Variation Search
     searchPVS(game, depth, alpha, beta, maximizingPlayer, hash, ply, canNull) {
-        if (this.nodeCount++ % 2048 === 0) {
+        // More frequent timeout check (every 1024 nodes) for better time control
+        if (this.nodeCount++ % 1024 === 0) {
             if (Date.now() - this.startTime > this.searchTime) this.timeout = true;
         }
         if (this.timeout) return alpha;
@@ -333,14 +345,31 @@ class AI {
         if (ttEntry && ttEntry.score !== null) return ttEntry.score;
         const ttMove = ttEntry ? ttEntry.move : null;
 
+        const color = maximizingPlayer ? 'red' : 'black';
+
+        // Check Extension - prevent horizon effect on checks
+        const inCheck = this.isKingInCheck(game, color);
+        if (inCheck && depth > 0) {
+            depth += 1;
+        }
+
         if (depth <= 0) {
             return this.quiescence(game, alpha, beta, maximizingPlayer);
         }
 
-        const color = maximizingPlayer ? 'red' : 'black';
+        // Static Null Move Pruning (Reverse Futility Pruning)
+        if (depth < 3 && !inCheck && ply > 0) {
+            const staticEval = this.evaluate(game);
+            const margin = 150 * depth; // ~150 cp per ply
+            if (maximizingPlayer) {
+                if (staticEval - margin >= beta) return beta;
+            } else {
+                if (staticEval + margin <= alpha) return alpha;
+            }
+        }
 
-        // Null Move Pruning
-        if (canNull && depth >= 3 && ply > 0 && !this.isKingInCheck(game, color)) {
+        // Null Move Pruning (skip if in check)
+        if (canNull && depth >= 3 && ply > 0 && !inCheck) {
             const R = 2;
             const nullHash = hash ^ ZOBRIST.turn; // Pass turn
             const score = -this.searchPVS(game, depth - 1 - R, -beta, -beta + 1, !maximizingPlayer, nullHash, ply + 1, false);
@@ -600,13 +629,25 @@ class AI {
         return moves;
     }
 
+    // Enhanced mobility counting full open lines, penalizes trapped pieces
     countRookMobility(game, x, y) {
-        let free = 0;
-        if (x > 0 && !game.board[y][x - 1]) free++;
-        if (x < 8 && !game.board[y][x + 1]) free++;
-        if (y > 0 && !game.board[y - 1][x]) free++;
-        if (y < 9 && !game.board[y + 1][x]) free++;
-        return free;
+        let mobility = 0;
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        for (const [dx, dy] of dirs) {
+            let cx = x + dx, cy = y + dy;
+            while (cx >= 0 && cx <= 8 && cy >= 0 && cy <= 9) {
+                if (!game.board[cy][cx]) {
+                    mobility++;
+                } else {
+                    break;
+                }
+                cx += dx;
+                cy += dy;
+            }
+        }
+        // Penalize trapped pieces (0 mobility is bad)
+        if (mobility === 0) return -3;
+        return mobility;
     }
 
     evaluateKingSafety(game, kx, ky, isRed) {
