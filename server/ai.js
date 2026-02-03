@@ -139,7 +139,11 @@ class AI {
         this.ttMove = new Int32Array(TT_SIZE);
 
         this.history = new Int32Array(90 * 90); // 8100 entries
-        this.killers = new Array(30).fill(null).map(() => [null, null]); // Up to 30 ply
+        this.killers = new Array(40).fill(null).map(() => [null, null]); // Up to 40 ply for deeper search
+
+        // Position history for repetition detection (stores last 50 position hashes)
+        this.positionHistory = [];
+        this.maxHistoryLength = 50;
     }
 
     reset() {
@@ -148,6 +152,7 @@ class AI {
         this.ttMove.fill(0);
         this.history.fill(0);
         this.killers.forEach(k => k.fill(null));
+        this.positionHistory = []; // Clear repetition history
     }
 
     // --- TT HELPER FUNCTIONS ---
@@ -221,6 +226,35 @@ class AI {
         return null;
     }
 
+    // --- REPETITION DETECTION METHODS ---
+    // Record a position hash in history (called after each actual move)
+    recordPosition(hash) {
+        this.positionHistory.push(hash);
+        // Keep history bounded
+        if (this.positionHistory.length > this.maxHistoryLength) {
+            this.positionHistory.shift();
+        }
+    }
+
+    // Count how many times a position hash appears in history
+    countRepetitions(hash) {
+        let count = 0;
+        for (const h of this.positionHistory) {
+            if (h === hash) count++;
+        }
+        return count;
+    }
+
+    // Check if a position is repeated (2+ times = considered repeated)
+    isRepeatedPosition(hash) {
+        return this.countRepetitions(hash) >= 2;
+    }
+
+    // Clear position history (call on new game)
+    clearPositionHistory() {
+        this.positionHistory = [];
+    }
+
     getBestMove(game, color, timeLimitMs = 1500) {
         try {
             // 1. Opening Book
@@ -249,15 +283,15 @@ class AI {
             }
             if (!maximize) hash ^= ZOBRIST.turn;
 
-            // Difficulty Configuration
+            // Difficulty Configuration - Enhanced for smarter AI
             let maxDepth = 4;
             let randomness = 0;
 
             const profile = this.difficulty;
-            if (profile === 'easy') { maxDepth = 3; randomness = 30; } // The Blunderer (Better 3 plies but errors)
-            if (profile === 'normal') { maxDepth = 5; randomness = 10; } // The Tactician
-            if (profile === 'hard') { maxDepth = 10; randomness = 0; } // The Strategist
-            if (profile === 'extreme') { maxDepth = 24; randomness = 0; } // The Grandmaster
+            if (profile === 'easy') { maxDepth = 4; randomness = 20; } // Beginner: Reasonable play with occasional mistakes
+            if (profile === 'normal') { maxDepth = 6; randomness = 5; } // Intermediate: Solid tactical play
+            if (profile === 'hard') { maxDepth = 12; randomness = 0; } // Advanced: Deep strategic thinking
+            if (profile === 'extreme') { maxDepth = 30; randomness = 0; } // Master: Maximum depth analysis
 
             console.log(`\n[AI] Start Search. Level: ${profile}, Time: ${this.searchTime}ms, MaxDepth: ${maxDepth}`);
 
@@ -323,6 +357,13 @@ class AI {
                 if (moves.length > 0) bestMove = moves[0];
             }
 
+            // Record position for repetition detection (after move is made externally)
+            // We record the resulting position hash after the move
+            if (bestMove) {
+                const resultHash = this.makeMoveHash(game, bestMove, hash);
+                this.recordPosition(resultHash);
+            }
+
             return bestMove;
 
         } catch (error) {
@@ -344,6 +385,13 @@ class AI {
         const ttEntry = this.probeTT(hash, depth, alpha, beta);
         if (ttEntry && ttEntry.score !== null) return ttEntry.score;
         const ttMove = ttEntry ? ttEntry.move : null;
+
+        // Repetition Detection - penalize repeated positions to avoid infinite loops
+        // If this position was seen before, treat it as a slight disadvantage (draw-like)
+        if (ply > 0 && this.isRepeatedPosition(hash)) {
+            // Return a draw score with slight penalty for the side that caused repetition
+            return maximizingPlayer ? -50 : 50;
+        }
 
         const color = maximizingPlayer ? 'red' : 'black';
 
@@ -560,6 +608,17 @@ class AI {
 
     evaluate(game) {
         let score = 0;
+        let redKingPos = null;
+        let blackKingPos = null;
+
+        // First pass: find kings and collect piece info
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                const piece = game.board[y][x];
+                if (piece === 'rge') redKingPos = { x, y };
+                if (piece === 'bge') blackKingPos = { x, y };
+            }
+        }
 
         // Full evaluation with mobility and king safety
         for (let y = 0; y < 10; y++) {
@@ -573,6 +632,7 @@ class AI {
                 let pst = 0;
                 let mobility = 0;
                 let safety = 0;
+                let penalty = 0;
 
                 const py = isRed ? y : (9 - y);
 
@@ -587,6 +647,15 @@ class AI {
                     case 'ma':
                         pst = PST_MA[py][x];
                         mobility += this.countHorseMobility(game, x, y) * 5;
+                        // Penalty: "Mã nhập cung giữa 2 đường chéo" - Horse on weak central palace squares
+                        // For red: penalize horse at (4, 7) or (4, 8) - in front of general
+                        // For black: penalize horse at (4, 1) or (4, 2)
+                        if (isRed && x === 4 && (y === 7 || y === 8)) {
+                            penalty += 50; // Blocks advisors, creates tactical weakness
+                        }
+                        if (!isRed && x === 4 && (y === 1 || y === 2)) {
+                            penalty += 50;
+                        }
                         break;
                     case 'ro':
                         pst = PST_RO[py][x];
@@ -604,12 +673,67 @@ class AI {
                     case 'ad': pst = PST_AD[py][x]; break;
                 }
 
-                const materialScore = val + pst + mobility + safety;
+                const materialScore = val + pst + mobility + safety - penalty;
                 if (isRed) score += materialScore;
                 else score -= materialScore;
             }
         }
+
+        // Check for "Pháo khống" (Cannon pin) - evaluate threats from enemy cannons
+        if (redKingPos) {
+            score -= this.detectCannonPin(game, redKingPos, 'red');
+        }
+        if (blackKingPos) {
+            score += this.detectCannonPin(game, blackKingPos, 'black');
+        }
+
         return score;
+    }
+
+    // Detect Cannon pin threat on the general - returns penalty value
+    // "Pháo khống" - Cannon pins a piece to the general
+    detectCannonPin(game, kingPos, kingColor) {
+        const kx = kingPos.x;
+        const ky = kingPos.y;
+        const enemyPrefix = kingColor === 'red' ? 'b' : 'r';
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        let penalty = 0;
+
+        for (const [dx, dy] of dirs) {
+            let cx = kx + dx, cy = ky + dy;
+            let screenPiece = null;
+            let screenPos = null;
+            let piecesFound = 0;
+
+            // Scan outward from king
+            while (cx >= 0 && cx <= 8 && cy >= 0 && cy <= 9) {
+                const p = game.board[cy][cx];
+                if (p) {
+                    piecesFound++;
+                    if (piecesFound === 1) {
+                        // First piece is potential screen (pinned piece)
+                        screenPiece = p;
+                        screenPos = { x: cx, y: cy };
+                    } else if (piecesFound === 2) {
+                        // Second piece - check if enemy cannon
+                        if (p.charAt(0) === enemyPrefix && p.slice(1) === 'ca') {
+                            // Cannon pin detected!
+                            // Penalty based on value of pinned piece
+                            const pinnedType = screenPiece.slice(1);
+                            const pinnedVal = PIECE_VALS[pinnedType] || 0;
+                            // Higher penalty if pinning own valuable piece
+                            if (screenPiece.charAt(0) !== enemyPrefix) {
+                                penalty += 80 + Math.floor(pinnedVal * 0.15);
+                            }
+                        }
+                        break;
+                    }
+                }
+                cx += dx;
+                cy += dy;
+            }
+        }
+        return penalty;
     }
 
     countHorseMobility(game, x, y) {

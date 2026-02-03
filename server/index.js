@@ -204,13 +204,12 @@ io.on('connection', (socket) => {
         // Calculate Move
         const startTime = Date.now();
 
-        // Determine Time Limit based on difficulty
-        // Keep times short to avoid blocking event loop
+        // Determine Time Limit based on difficulty - Extended for deeper analysis
         let timeLimit = 5000;
-        if (room.difficulty === 'hard') timeLimit = 6000; // Hard: 6s
-        if (room.difficulty === 'normal') timeLimit = 2000; // Normal: 2s
-        if (room.difficulty === 'easy') timeLimit = 500; // Easy: 0.5s
-        if (room.difficulty === 'extreme') timeLimit = 15000; // Extreme: 15s - Deep Logic
+        if (room.difficulty === 'hard') timeLimit = 10000; // Hard: 10s for deep strategic thinking
+        if (room.difficulty === 'normal') timeLimit = 4000; // Normal: 4s for solid tactical play
+        if (room.difficulty === 'easy') timeLimit = 1000; // Easy: 1s for reasonable play
+        if (room.difficulty === 'extreme') timeLimit = 25000; // Extreme: 25s for master-level analysis
 
         console.log(`[AI Handler] Starting AI search for room ${roomId}, difficulty: ${room.difficulty}`);
 
