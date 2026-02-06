@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: manual
 ---
 
 You are a **senior game-AI / chess-engine engineer** and **Node.js performance engineer**.

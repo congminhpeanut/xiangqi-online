@@ -206,10 +206,9 @@ io.on('connection', (socket) => {
 
         // Determine Time Limit based on difficulty - Extended for deeper analysis
         let timeLimit = 5000;
-        if (room.difficulty === 'hard') timeLimit = 10000; // Hard: 10s for deep strategic thinking
+        if (room.difficulty === 'hard') timeLimit = 15000; // Hard: 15s for champion-level analysis
         if (room.difficulty === 'normal') timeLimit = 4000; // Normal: 4s for solid tactical play
         if (room.difficulty === 'easy') timeLimit = 1000; // Easy: 1s for reasonable play
-        if (room.difficulty === 'extreme') timeLimit = 25000; // Extreme: 25s for master-level analysis
 
         console.log(`[AI Handler] Starting AI search for room ${roomId}, difficulty: ${room.difficulty}`);
 

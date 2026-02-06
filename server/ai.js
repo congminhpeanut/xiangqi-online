@@ -288,54 +288,42 @@ class AI {
             let randomness = 0;
 
             const profile = this.difficulty;
+
             if (profile === 'easy') { maxDepth = 4; randomness = 20; } // Beginner: Reasonable play with occasional mistakes
             if (profile === 'normal') { maxDepth = 6; randomness = 5; } // Intermediate: Solid tactical play
-            if (profile === 'hard') { maxDepth = 12; randomness = 0; } // Advanced: Deep strategic thinking
-            if (profile === 'extreme') { maxDepth = 30; randomness = 0; } // Master: Maximum depth analysis
+            if (profile === 'hard') {
+                maxDepth = 20; // Champion level: very deep strategic thinking
+                randomness = 0;
+                this.searchTime = Math.min(timeLimitMs, 12000); // 12s budget for deep analysis
+            }
 
             console.log(`\n[AI] Start Search. Level: ${profile}, Time: ${this.searchTime}ms, MaxDepth: ${maxDepth}`);
 
-            // Iterative Deepening
+            // Iterative Deepening with dedicated root search
+            let previousBestMove = null;
+            let previousBestScore = 0;
+
             for (let depth = 1; depth <= maxDepth; depth++) {
                 if (Date.now() - this.startTime >= this.searchTime) break;
 
-                // Aspiration Windows
-                let alpha = -20000;
-                let beta = 20000;
-                let windowSize = 50;
-
-                if (depth > 4 && bestMove) { // Only aspirate if we have a guess
-                    alpha = finalScore - windowSize;
-                    beta = finalScore + windowSize;
-                }
-
-                let score = this.searchPVS(game, depth, alpha, beta, maximize, hash, 0, true);
-
-                // Fail Low/High Handling
-                if ((score <= alpha || score >= beta) && !this.timeout) {
-                    if (depth > 4) {
-                        console.log(`[AI] Aspiration Fail at D${depth} (${score}), re-searching full width.`);
-                        alpha = -20000;
-                        beta = 20000;
-                        score = this.searchPVS(game, depth, alpha, beta, maximize, hash, 0, true);
-                    }
-                }
+                // Use dedicated root search that returns {move, score}
+                const result = this.searchRoot(game, depth, maximize, hash, previousBestMove);
 
                 if (this.timeout) {
-                    // Try to preserve previous best move if timeout occurred mid-iteration
-                    console.log(`[AI] Timeout inside D${depth}`);
+                    // Use the previous completed iteration's move
+                    console.log(`[AI] Timeout inside D${depth}, using D${depth - 1} result`);
                     break;
                 }
 
-                // Retrieve PV from TT for best move
-                const probe = this.probeTT(hash, depth, -Infinity, Infinity);
-                if (probe && probe.move) {
-                    bestMove = probe.move;
-                    finalScore = score;
-                    console.log(`[AI] Info Depth ${depth} Score ${finalScore} Nodes ${this.nodeCount} (${(this.nodeCount / (Date.now() - this.startTime) * 1000).toFixed(0)} nps) PV ${probe.move.from.x},${probe.move.from.y}->${probe.move.to.x},${probe.move.to.y}`);
+                if (result && result.move) {
+                    previousBestMove = result.move;
+                    previousBestScore = result.score;
+                    bestMove = result.move;
+                    finalScore = result.score;
+                    console.log(`[AI] Info Depth ${depth} Score ${finalScore} Nodes ${this.nodeCount} (${(this.nodeCount / (Date.now() - this.startTime) * 1000).toFixed(0)} nps) PV ${result.move.from.x},${result.move.from.y}->${result.move.to.x},${result.move.to.y}`);
                 }
 
-                if (Math.abs(score) > 10000) break; // Mate found
+                if (Math.abs(finalScore) > 10000) break; // Mate found
             }
 
             // Blunder Logic via Entropy
@@ -357,11 +345,51 @@ class AI {
                 if (moves.length > 0) bestMove = moves[0];
             }
 
-            // Record position for repetition detection (after move is made externally)
-            // We record the resulting position hash after the move
+            // === REPETITION AVOIDANCE ===
+            // Check if best move would cause a repetition - if so, try to find alternative
             if (bestMove) {
                 const resultHash = this.makeMoveHash(game, bestMove, hash);
-                this.recordPosition(resultHash);
+                const repCount = this.countRepetitions(resultHash);
+
+                if (repCount >= 1) {
+                    // This move would cause repetition (already seen at least once before)
+                    console.log(`[AI] Best move causes repetition (count: ${repCount}), seeking alternative...`);
+
+                    // Try to find a non-repeating alternative
+                    const moves = this.generateMoves(game, color);
+                    this.scoreMoves(moves, bestMove, 0, game);
+                    moves.sort((a, b) => b.score - a.score);
+
+                    let alternativeFound = false;
+                    for (const move of moves) {
+                        if (this.sameMove(move, bestMove)) continue;
+
+                        const altHash = this.makeMoveHash(game, move, hash);
+                        if (this.countRepetitions(altHash) === 0) {
+                            // Found a non-repeating move
+                            // Verify it's not completely losing (within 300cp of best)
+                            this.applyMove(game, move);
+                            const altScore = this.evaluate(game);
+                            this.undoMove(game, move);
+
+                            // Accept if within reasonable margin
+                            if (Math.abs(altScore - finalScore) < 300 || moves.indexOf(move) < 5) {
+                                console.log(`[AI] Found alternative: ${move.from.x},${move.from.y}->${move.to.x},${move.to.y}`);
+                                bestMove = move;
+                                alternativeFound = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!alternativeFound) {
+                        console.log(`[AI] No good alternative found, using original move`);
+                    }
+                }
+
+                // Record the final position for future repetition detection
+                const finalHash = this.makeMoveHash(game, bestMove, hash);
+                this.recordPosition(finalHash);
             }
 
             return bestMove;
@@ -373,6 +401,70 @@ class AI {
         }
     }
 
+    // Dedicated root search that returns the best move directly (not from TT)
+    searchRoot(game, depth, maximize, hash, previousBestMove) {
+        const color = maximize ? 'red' : 'black';
+        let moves = this.generateMoves(game, color);
+
+        if (moves.length === 0) {
+            return { move: null, score: maximize ? -15000 : 15000 };
+        }
+
+        // Move ordering - prioritize previous best move
+        this.scoreMoves(moves, previousBestMove, 0, game);
+        moves.sort((a, b) => b.score - a.score);
+
+        let bestMove = moves[0];
+        let bestScore = maximize ? -Infinity : Infinity;
+        let alpha = -20000;
+        let beta = 20000;
+
+        for (let i = 0; i < moves.length; i++) {
+            const move = moves[i];
+            const moveKey = this.makeMoveHash(game, move, hash);
+            this.applyMove(game, move);
+
+            let score;
+            if (i === 0) {
+                // Full window for first move
+                score = this.searchPVS(game, depth - 1, alpha, beta, !maximize, moveKey, 1, true);
+            } else {
+                // PVS: null window search first
+                score = this.searchPVS(game, depth - 1, alpha, alpha + 1, !maximize, moveKey, 1, true);
+                if (score > alpha && score < beta) {
+                    // Re-search with full window
+                    score = this.searchPVS(game, depth - 1, alpha, beta, !maximize, moveKey, 1, true);
+                }
+            }
+
+            this.undoMove(game, move);
+
+            if (this.timeout) {
+                // Return partial result - use current best or first move
+                return { move: bestMove, score: bestScore };
+            }
+
+            if (maximize) {
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+                if (score > alpha) alpha = score;
+            } else {
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+                if (score < beta) beta = score;
+            }
+        }
+
+        // Store to TT for future use
+        this.storeTT(hash, depth, TT_FLAG.EXACT, bestScore, bestMove);
+
+        return { move: bestMove, score: bestScore };
+    }
+
     // Principal Variation Search
     searchPVS(game, depth, alpha, beta, maximizingPlayer, hash, ply, canNull) {
         // More frequent timeout check (every 1024 nodes) for better time control
@@ -381,10 +473,16 @@ class AI {
         }
         if (this.timeout) return alpha;
 
-        // TT Probe
+        // TT Probe - but DON'T return score cutoff at root (ply 0) to ensure proper search
         const ttEntry = this.probeTT(hash, depth, alpha, beta);
-        if (ttEntry && ttEntry.score !== null) return ttEntry.score;
-        const ttMove = ttEntry ? ttEntry.move : null;
+        let ttMove = null;
+        if (ttEntry) {
+            ttMove = ttEntry.move;
+            // Only use TT score cutoff at non-root nodes
+            if (ply > 0 && ttEntry.score !== null) {
+                return ttEntry.score;
+            }
+        }
 
         // Repetition Detection - penalize repeated positions to avoid infinite loops
         // If this position was seen before, treat it as a slight disadvantage (draw-like)
@@ -450,11 +548,11 @@ class AI {
                 if (moveCount === 0) {
                     score = this.searchPVS(game, depth - 1, currentAlpha, beta, false, moveKey, ply + 1, true);
                 } else {
-                    // LMR
+                    // LMR - Conservative thresholds for strong play
                     let R = 0;
-                    if (depth >= 3 && moveCount > 4 && !move.captured) {
+                    if (depth >= 3 && moveCount > 6 && !move.captured) {
                         R = 1;
-                        if (depth > 6 && moveCount > 10) R = 2;
+                        if (depth > 6 && moveCount > 12) R = 2;
                     }
 
                     // PVS Scout
@@ -511,10 +609,11 @@ class AI {
                 if (moveCount === 0) {
                     score = this.searchPVS(game, depth - 1, alpha, currentBeta, true, moveKey, ply + 1, true);
                 } else {
+                    // LMR - Conservative thresholds for strong play
                     let R = 0;
-                    if (depth >= 3 && moveCount > 4 && !move.captured) {
+                    if (depth >= 3 && moveCount > 6 && !move.captured) {
                         R = 1;
-                        if (depth > 6 && moveCount > 10) R = 2;
+                        if (depth > 6 && moveCount > 12) R = 2;
                     }
 
                     // Scout with Null Window [beta-1, beta]
@@ -562,6 +661,8 @@ class AI {
         if (this.timeout) return maximizingPlayer ? -15000 : 15000;
 
         const standPat = this.evaluate(game);
+
+        // Stand pat cutoff
         if (maximizingPlayer) {
             if (standPat >= beta) return beta;
             if (alpha < standPat) alpha = standPat;
@@ -573,14 +674,22 @@ class AI {
         const color = maximizingPlayer ? 'red' : 'black';
         const moves = this.generateMoves(game, color, true); // Captures Only
 
+        // Sort by victim value (MVV)
         moves.sort((a, b) => {
             const vicA = PIECE_VALS[a.captured.slice(1)] || 0;
             const vicB = PIECE_VALS[b.captured.slice(1)] || 0;
             return vicB - vicA;
         });
 
+        // Delta pruning margin
+        const DELTA_MARGIN = 200;
+
         if (maximizingPlayer) {
             for (const move of moves) {
+                // Delta pruning: skip if capture can't possibly improve alpha
+                const victimVal = PIECE_VALS[move.captured.slice(1)] || 0;
+                if (standPat + victimVal + DELTA_MARGIN < alpha) continue;
+
                 this.applyMove(game, move);
                 const score = this.quiescence(game, alpha, beta, false);
                 this.undoMove(game, move);
@@ -593,6 +702,10 @@ class AI {
             return alpha;
         } else {
             for (const move of moves) {
+                // Delta pruning for minimizer
+                const victimVal = PIECE_VALS[move.captured.slice(1)] || 0;
+                if (standPat - victimVal - DELTA_MARGIN > beta) continue;
+
                 this.applyMove(game, move);
                 const score = this.quiescence(game, alpha, beta, true);
                 this.undoMove(game, move);
@@ -611,14 +724,44 @@ class AI {
         let redKingPos = null;
         let blackKingPos = null;
 
-        // First pass: find kings and collect piece info
+        // Piece tracking for coordination bonuses
+        const redRooks = [];
+        const blackRooks = [];
+        const redCannons = [];
+        const blackCannons = [];
+        const redHorses = [];
+        const blackHorses = [];
+        const redPawns = [];
+        const blackPawns = [];
+        let redAdvisors = 0, blackAdvisors = 0;
+        let redElephants = 0, blackElephants = 0;
+        let totalPieces = 0;
+
+        // First pass: find kings and collect piece positions
         for (let y = 0; y < 10; y++) {
             for (let x = 0; x < 9; x++) {
                 const piece = game.board[y][x];
+                if (!piece) continue;
+                totalPieces++;
+
                 if (piece === 'rge') redKingPos = { x, y };
-                if (piece === 'bge') blackKingPos = { x, y };
+                else if (piece === 'bge') blackKingPos = { x, y };
+                else if (piece === 'rro') redRooks.push({ x, y });
+                else if (piece === 'bro') blackRooks.push({ x, y });
+                else if (piece === 'rca') redCannons.push({ x, y });
+                else if (piece === 'bca') blackCannons.push({ x, y });
+                else if (piece === 'rma') redHorses.push({ x, y });
+                else if (piece === 'bma') blackHorses.push({ x, y });
+                else if (piece === 'rso') redPawns.push({ x, y });
+                else if (piece === 'bso') blackPawns.push({ x, y });
+                else if (piece === 'rad') redAdvisors++;
+                else if (piece === 'bad') blackAdvisors++;
+                else if (piece === 'rel') redElephants++;
+                else if (piece === 'bel') blackElephants++;
             }
         }
+
+        const isEndgame = totalPieces <= 14;
 
         // Full evaluation with mobility and king safety
         for (let y = 0; y < 10; y++) {
@@ -633,6 +776,7 @@ class AI {
                 let mobility = 0;
                 let safety = 0;
                 let penalty = 0;
+                let bonus = 0;
 
                 const py = isRed ? y : (9 - y);
 
@@ -643,15 +787,39 @@ class AI {
                             if (Math.abs(4 - x) <= 2) pst += 20;
                             if (py <= 1) pst += 30;
                         }
+                        // Passed pawn bonus (no enemy pawns ahead)
+                        const enemyPawns = isRed ? blackPawns : redPawns;
+                        let isPassed = true;
+                        for (const ep of enemyPawns) {
+                            if (Math.abs(ep.x - x) <= 1 && (isRed ? ep.y < y : ep.y > y)) {
+                                isPassed = false;
+                                break;
+                            }
+                        }
+                        if (isPassed && py <= 4) {
+                            bonus += 15 + (4 - py) * 10; // Reduced: Closer to promotion = more valuable
+                        }
+                        // Connected pawns
+                        const friendlyPawns = isRed ? redPawns : blackPawns;
+                        for (const fp of friendlyPawns) {
+                            if (fp.x !== x && Math.abs(fp.x - x) <= 1 && Math.abs(fp.y - y) <= 1) {
+                                bonus += 8; // Reduced connected pawn support
+                                break;
+                            }
+                        }
                         break;
                     case 'ma':
                         pst = PST_MA[py][x];
                         mobility += this.countHorseMobility(game, x, y) * 5;
-                        // Penalty: "Mã nhập cung giữa 2 đường chéo" - Horse on weak central palace squares
-                        // For red: penalize horse at (4, 7) or (4, 8) - in front of general
-                        // For black: penalize horse at (4, 1) or (4, 2)
+                        // Centralization bonus
+                        if (py >= 3 && py <= 6 && x >= 2 && x <= 6) {
+                            bonus += 8; // Reduced centralization bonus
+                        }
+                        // Horse in endgame is stronger
+                        if (isEndgame) bonus += 15; // Reduced endgame horse bonus
+                        // Penalty: Horse on weak central palace squares
                         if (isRed && x === 4 && (y === 7 || y === 8)) {
-                            penalty += 50; // Blocks advisors, creates tactical weakness
+                            penalty += 50;
                         }
                         if (!isRed && x === 4 && (y === 1 || y === 2)) {
                             penalty += 50;
@@ -660,26 +828,123 @@ class AI {
                     case 'ro':
                         pst = PST_RO[py][x];
                         mobility += this.countRookMobility(game, x, y) * 2;
+                        // Rook on 7th rank (enemy's 2nd rank) bonus
+                        if ((isRed && y <= 2) || (!isRed && y >= 7)) {
+                            bonus += 40;
+                        }
+                        // Open file bonus
+                        let openFile = true;
+                        for (let ty = 0; ty < 10; ty++) {
+                            if (ty !== y && game.board[ty][x] && game.board[ty][x].slice(1) === 'so') {
+                                openFile = false;
+                                break;
+                            }
+                        }
+                        if (openFile) bonus += 25;
                         break;
                     case 'ca':
                         pst = PST_CA[py][x];
                         mobility += this.countRookMobility(game, x, y) * 2;
+                        // Cannon needs screen pieces - penalty in endgame with few pieces
+                        if (isEndgame) penalty += 40;
                         break;
                     case 'ge':
                         pst = PST_GE[py][x];
                         safety = this.evaluateKingSafety(game, x, y, isRed);
+                        // Endgame king activity
+                        if (isEndgame && py <= 7) bonus += 20;
                         break;
                     case 'el': pst = PST_EL[py][x]; break;
                     case 'ad': pst = PST_AD[py][x]; break;
                 }
 
-                const materialScore = val + pst + mobility + safety - penalty;
+                const materialScore = val + pst + mobility + safety + bonus - penalty;
                 if (isRed) score += materialScore;
                 else score -= materialScore;
             }
         }
 
-        // Check for "Pháo khống" (Cannon pin) - evaluate threats from enemy cannons
+        // === PIECE COORDINATION BONUSES (reduced to prioritize tactics) ===
+
+        // Double Rooks on same file or rank
+        if (redRooks.length === 2) {
+            if (redRooks[0].x === redRooks[1].x || redRooks[0].y === redRooks[1].y) {
+                score += 30; // Reduced from 80
+            }
+            // Double rooks on enemy back rank ("Song xa áp thành")
+            if (redRooks[0].y <= 2 && redRooks[1].y <= 2) {
+                score += 50; // Reduced from 150
+            }
+        }
+        if (blackRooks.length === 2) {
+            if (blackRooks[0].x === blackRooks[1].x || blackRooks[0].y === blackRooks[1].y) {
+                score -= 30;
+            }
+            if (blackRooks[0].y >= 7 && blackRooks[1].y >= 7) {
+                score -= 50;
+            }
+        }
+
+        // Cannon + Horse coordination (reduced)
+        for (const cannon of redCannons) {
+            for (const horse of redHorses) {
+                if (Math.abs(cannon.x - horse.x) <= 2 && Math.abs(cannon.y - horse.y) <= 2) {
+                    score += 20; // Reduced from 60
+                }
+            }
+        }
+        for (const cannon of blackCannons) {
+            for (const horse of blackHorses) {
+                if (Math.abs(cannon.x - horse.x) <= 2 && Math.abs(cannon.y - horse.y) <= 2) {
+                    score -= 20;
+                }
+            }
+        }
+
+        // === TACTICAL PATTERNS ===
+
+        // "Pháo đầu" - Cannon on same file as enemy General
+        if (blackKingPos) {
+            for (const cannon of redCannons) {
+                if (cannon.x === blackKingPos.x && cannon.y < blackKingPos.y) {
+                    // Check if there's exactly one screen piece
+                    let screens = 0;
+                    for (let ty = cannon.y + 1; ty < blackKingPos.y; ty++) {
+                        if (game.board[ty][cannon.x]) screens++;
+                    }
+                    if (screens === 1) score += 100; // "Pháo đầu" threat
+                    else if (screens === 0) score += 50; // Direct pressure
+                }
+            }
+        }
+        if (redKingPos) {
+            for (const cannon of blackCannons) {
+                if (cannon.x === redKingPos.x && cannon.y > redKingPos.y) {
+                    let screens = 0;
+                    for (let ty = redKingPos.y + 1; ty < cannon.y; ty++) {
+                        if (game.board[ty][cannon.x]) screens++;
+                    }
+                    if (screens === 1) score -= 100;
+                    else if (screens === 0) score -= 50;
+                }
+            }
+        }
+
+        // === ADVANCED KING SAFETY ===
+
+        // Exposed general penalty - fewer defenders = more danger
+        if (redKingPos) {
+            if (redAdvisors === 0) score -= 80;
+            if (redElephants === 0) score -= 40;
+            if (redAdvisors === 0 && redElephants === 0) score -= 120; // Very exposed
+        }
+        if (blackKingPos) {
+            if (blackAdvisors === 0) score += 80;
+            if (blackElephants === 0) score += 40;
+            if (blackAdvisors === 0 && blackElephants === 0) score += 120;
+        }
+
+        // "Pháo khống" (Cannon pin) detection
         if (redKingPos) {
             score -= this.detectCannonPin(game, redKingPos, 'red');
         }
@@ -793,21 +1058,46 @@ class AI {
     scoreMoves(moves, ttMove, ply, game) {
         for (const move of moves) {
             move.score = 0;
+
+            // 1. TT Move: highest priority
             if (ttMove && this.sameMove(move, ttMove)) {
-                move.score = 20000;
+                move.score = 30000;
                 continue;
             }
+
+            // 2. Captures: MVV-LVA with win/loss distinction
             if (move.captured) {
                 const victimVal = PIECE_VALS[move.captured.slice(1)] || 0;
                 const attackerVal = PIECE_VALS[game.board[move.from.y][move.from.x].slice(1)] || 0;
-                move.score = 1000 + victimVal * 10 - attackerVal;
+                const mvvLva = victimVal * 10 - attackerVal;
+
+                // Winning capture (victim >= attacker): priority 20000+
+                // Losing capture (victim < attacker): priority -10000+
+                if (victimVal >= attackerVal) {
+                    move.score = 20000 + mvvLva;
+                } else {
+                    move.score = -10000 + mvvLva;
+                }
+                continue;
             }
+
+            // 3. Killer moves: high priority for quiet moves
             if (this.killers[ply]) {
-                if ((this.killers[ply][0] && this.sameMove(move, this.killers[ply][0]))) move.score += 900;
-                else if ((this.killers[ply][1] && this.sameMove(move, this.killers[ply][1]))) move.score += 800;
+                if (this.killers[ply][0] && this.sameMove(move, this.killers[ply][0])) {
+                    move.score = 9000;
+                    continue;
+                }
+                if (this.killers[ply][1] && this.sameMove(move, this.killers[ply][1])) {
+                    move.score = 8000;
+                    continue;
+                }
             }
+
+            // 4. History heuristic: scale to 0-6000 range
             const hIdx = (move.from.y * 9 + move.from.x) * 90 + (move.to.y * 9 + move.to.x);
-            if (this.history[hIdx]) move.score += this.history[hIdx];
+            if (this.history[hIdx]) {
+                move.score += Math.min(this.history[hIdx], 6000);
+            }
         }
     }
 
